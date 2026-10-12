@@ -1,5 +1,6 @@
-from pathlib import Path
 import os
+from pathlib import Path
+
 import dj_database_url
 from dotenv import load_dotenv
 
@@ -14,13 +15,18 @@ else:
     load_dotenv(BASE_DIR / ".env.example")
 
 # Security
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "invlab-development-insecure-secret-key-replace-in-prod")
+SECRET_KEY = os.getenv(
+    "DJANGO_SECRET_KEY", "invlab-development-insecure-secret-key-replace-in-prod"
+)
 DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
 
 allowed_hosts_str = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_str.split(",") if h.strip()]
 
-csrf_trusted_str = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost:8000,http://localhost:5173,http://127.0.0.1:8000,http://127.0.0.1:5173")
+csrf_trusted_str = os.getenv(
+    "CSRF_TRUSTED_ORIGINS",
+    "http://localhost:8000,http://localhost:5173,http://127.0.0.1:8000,http://127.0.0.1:5173",
+)
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in csrf_trusted_str.split(",") if o.strip()]
 
 # Application definition
@@ -81,9 +87,7 @@ ASGI_APPLICATION = "config.asgi.application"
 # Database
 database_url = os.getenv("DATABASE_URL", "").strip()
 if database_url:
-    DATABASES = {
-        "default": dj_database_url.parse(database_url, conn_max_age=600)
-    }
+    DATABASES = {"default": dj_database_url.parse(database_url, conn_max_age=600)}
 else:
     DATABASES = {
         "default": {
@@ -100,7 +104,10 @@ AUTH_USER_MODEL = "accounts.User"
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 8},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -122,7 +129,9 @@ STORAGES = {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage" if not DEBUG else "django.contrib.staticfiles.storage.StaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        if not DEBUG
+        else "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
 

@@ -1,6 +1,8 @@
 from rest_framework import serializers
-from .models import Warehouse
+
 from accounts.models import User
+
+from .models import Warehouse
 
 
 class ManagerMinimalSerializer(serializers.ModelSerializer):

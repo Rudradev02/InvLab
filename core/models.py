@@ -15,7 +15,10 @@ class NumberSequence(models.Model):
     Locked counter row per warehouse, sequence type, and year.
     Used for safe, race-free sequential numbering (e.g., SL-PUN-2026-00001).
     """
-    warehouse = models.ForeignKey("warehouses.Warehouse", on_delete=models.CASCADE, related_name="sequences")
+
+    warehouse = models.ForeignKey(
+        "warehouses.Warehouse", on_delete=models.CASCADE, related_name="sequences"
+    )
     sequence_type = models.CharField(max_length=20, db_index=True)  # 'sale', 'transfer'
     year = models.PositiveIntegerField(db_index=True)
     last_number = models.PositiveIntegerField(default=0)

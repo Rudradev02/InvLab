@@ -1,22 +1,22 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied, NotFound
 from django.db.models import Q
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.response import Response
+
+from core.permissions import (
+    ROLE_ADMIN,
+    IsWarehouseManager,
+    get_user_role,
+)
 
 from .models import StockTransfer
 from .serializers import (
-    StockTransferSerializer,
     CreateTransferRequestSerializer,
     ReceiveTransferRequestSerializer,
+    StockTransferSerializer,
 )
 from .services import dispatch_transfer, receive_transfer
-from core.permissions import (
-    IsWarehouseManager,
-    ROLE_ADMIN,
-    ROLE_MANAGER,
-    get_user_role,
-)
 
 
 class StockTransferViewSet(viewsets.ModelViewSet):
@@ -27,9 +27,11 @@ class StockTransferViewSet(viewsets.ModelViewSet):
         user = self.request.user
         role = get_user_role(user)
 
-        qs = StockTransfer.objects.all().select_related(
-            "from_warehouse", "to_warehouse", "dispatched_by", "received_by"
-        ).prefetch_related("lines__product")
+        qs = (
+            StockTransfer.objects.all()
+            .select_related("from_warehouse", "to_warehouse", "dispatched_by", "received_by")
+            .prefetch_related("lines__product")
+        )
 
         if role == ROLE_ADMIN:
             warehouse_id = self.request.query_params.get("warehouse")
@@ -80,7 +82,9 @@ class StockTransferViewSet(viewsets.ModelViewSet):
         # Scoping: Manager can only receive transfers into their own warehouse
         if role != ROLE_ADMIN:
             if transfer.to_warehouse_id != user.profile.warehouse_id:
-                raise PermissionDenied("You can only confirm transfers incoming to your own warehouse.")
+                raise PermissionDenied(
+                    "You can only confirm transfers incoming to your own warehouse."
+                )
 
         serializer = ReceiveTransferRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

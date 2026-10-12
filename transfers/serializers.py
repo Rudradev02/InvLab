@@ -1,6 +1,8 @@
 from rest_framework import serializers
-from .models import StockTransfer, StockTransferLine
+
 from catalog.serializers import ProductSerializer
+
+from .models import StockTransfer, StockTransferLine
 
 
 class StockTransferLineSerializer(serializers.ModelSerializer):

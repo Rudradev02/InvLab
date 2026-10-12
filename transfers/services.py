@@ -1,13 +1,15 @@
 from django.db import transaction
 from django.utils import timezone
-from .models import StockTransfer, StockTransferLine
+
+from audit.models import AuditLog
 from catalog.models import Product
-from warehouses.models import Warehouse
+from core.exceptions import ConflictError, DomainError, InsufficientStockError
+from core.models import NumberSequence
 from inventory.models import StockLevel, StockMovement
 from inventory.services import get_or_create_locked_stock_level
-from core.models import NumberSequence
-from core.exceptions import InsufficientStockError, DomainError, ConflictError
-from audit.models import AuditLog
+from warehouses.models import Warehouse
+
+from .models import StockTransfer, StockTransferLine
 
 
 def dispatch_transfer(
@@ -22,7 +24,9 @@ def dispatch_transfer(
     Fixed lock order: warehouse id, then product id.
     """
     if from_warehouse_id == to_warehouse_id:
-        raise DomainError("Source and destination warehouses cannot be the same.", code="same_warehouse")
+        raise DomainError(
+            "Source and destination warehouses cannot be the same.", code="same_warehouse"
+        )
 
     if not lines_data:
         raise DomainError("Transfer must contain at least one line item.", code="empty_transfer")
@@ -34,7 +38,9 @@ def dispatch_transfer(
         to_wh = Warehouse.objects.get(pk=to_warehouse_id, is_active=True)
 
         year = timezone.now().year
-        seq_num = NumberSequence.get_next_number(warehouse=from_wh, sequence_type="transfer", year=year)
+        seq_num = NumberSequence.get_next_number(
+            warehouse=from_wh, sequence_type="transfer", year=year
+        )
         transfer_number = f"TR-{from_wh.code}-{to_wh.code}-{year}-{seq_num:05d}"
 
         transfer = StockTransfer.objects.create(
@@ -54,10 +60,14 @@ def dispatch_transfer(
                 raise DomainError("Transfer quantity must be positive.", code="invalid_quantity")
 
             product = Product.objects.get(pk=product_id, is_active=True)
-            stock_level = StockLevel.objects.select_for_update().filter(
-                warehouse=from_wh,
-                product=product,
-            ).first()
+            stock_level = (
+                StockLevel.objects.select_for_update()
+                .filter(
+                    warehouse=from_wh,
+                    product=product,
+                )
+                .first()
+            )
 
             available = stock_level.quantity if stock_level else 0
             if available < qty:
@@ -111,13 +121,18 @@ def receive_transfer(
     with transaction.atomic():
         transfer = StockTransfer.objects.select_for_update().get(pk=transfer_id)
         if transfer.status != "dispatched":
-            raise ConflictError(f"Cannot receive transfer in '{transfer.status}' status.", code="invalid_transfer_status")
+            raise ConflictError(
+                f"Cannot receive transfer in '{transfer.status}' status.",
+                code="invalid_transfer_status",
+            )
 
         lines = transfer.lines.select_related("product").all()
         for line in lines:
             received_qty = received_items.get(line.product_id, line.dispatched_quantity)
             if received_qty < 0:
-                raise DomainError("Received quantity cannot be negative.", code="invalid_received_quantity")
+                raise DomainError(
+                    "Received quantity cannot be negative.", code="invalid_received_quantity"
+                )
 
             variance = line.dispatched_quantity - received_qty
             line.received_quantity = received_qty
@@ -125,7 +140,9 @@ def receive_transfer(
             line.save(update_fields=["received_quantity", "variance"])
 
             if received_qty > 0:
-                dest_stock = get_or_create_locked_stock_level(transfer.to_warehouse_id, line.product_id)
+                dest_stock = get_or_create_locked_stock_level(
+                    transfer.to_warehouse_id, line.product_id
+                )
                 dest_stock.quantity += received_qty
                 dest_stock.save(update_fields=["quantity", "updated_at"])
 

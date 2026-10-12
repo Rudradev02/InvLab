@@ -1,6 +1,8 @@
 from rest_framework import serializers
-from .models import StockLevel, StockMovement
+
 from catalog.serializers import ProductSerializer
+
+from .models import StockLevel, StockMovement
 
 
 class StockLevelSerializer(serializers.ModelSerializer):

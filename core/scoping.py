@@ -1,5 +1,6 @@
-from rest_framework.exceptions import PermissionDenied, NotFound
-from core.permissions import get_user_role, ROLE_ADMIN, ROLE_MANAGER, ROLE_STAFF
+from rest_framework.exceptions import NotFound, PermissionDenied
+
+from core.permissions import ROLE_ADMIN, get_user_role
 
 
 class WarehouseScopeMixin:
@@ -8,6 +9,7 @@ class WarehouseScopeMixin:
     for Managers and Staff. Admins can view all, or optionally filter with ?warehouse=<id>.
     Detail lookups automatically return 404 for records outside the user's warehouse.
     """
+
     warehouse_field = "warehouse"
 
     def get_queryset(self):
@@ -51,12 +53,15 @@ class WarehouseScopeMixin:
             return profile.warehouse
 
         # For Admin
-        warehouse_id = self.request.data.get("warehouse") or self.request.query_params.get("warehouse")
+        warehouse_id = self.request.data.get("warehouse") or self.request.query_params.get(
+            "warehouse"
+        )
         if warehouse_id:
             from warehouses.models import Warehouse
+
             try:
                 return Warehouse.objects.get(pk=warehouse_id, is_active=True)
             except Warehouse.DoesNotExist:
-                raise NotFound("Specified warehouse not found or is inactive.")
+                raise NotFound("Specified warehouse not found or is inactive.") from None
 
         return None

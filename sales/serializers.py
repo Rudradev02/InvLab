@@ -1,7 +1,8 @@
 from rest_framework import serializers
-from decimal import Decimal
-from .models import Sale, SaleLine
+
 from catalog.serializers import ProductSerializer
+
+from .models import Sale, SaleLine
 
 
 class SaleLineSerializer(serializers.ModelSerializer):

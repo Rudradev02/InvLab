@@ -1,24 +1,25 @@
 from django.db import models
-from rest_framework import viewsets, mixins, status
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied, NotFound
+
+from core.permissions import (
+    ROLE_ADMIN,
+    IsStaff,
+    IsWarehouseManager,
+    get_user_role,
+)
+from core.scoping import WarehouseScopeMixin
 
 from .models import StockLevel, StockMovement
 from .serializers import (
+    AdjustStockSerializer,
+    ReceiveStockSerializer,
     StockLevelSerializer,
     StockMovementSerializer,
-    ReceiveStockSerializer,
-    AdjustStockSerializer,
 )
-from .services import receive_stock, adjust_stock
-from core.scoping import WarehouseScopeMixin
-from core.permissions import (
-    IsStaff,
-    IsWarehouseManager,
-    ROLE_ADMIN,
-    get_user_role,
-)
+from .services import adjust_stock, receive_stock
 
 
 class StockLevelViewSet(WarehouseScopeMixin, viewsets.ReadOnlyModelViewSet):
@@ -93,12 +94,19 @@ class StockLevelViewSet(WarehouseScopeMixin, viewsets.ReadOnlyModelViewSet):
         return Response(StockLevelSerializer(stock_level).data, status=status.HTTP_200_OK)
 
 
-class StockMovementViewSet(WarehouseScopeMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+class StockMovementViewSet(
+    WarehouseScopeMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
     """
     Stock ledger viewset.
     Strictly scoped: Staff cannot view ledger; Manager sees own warehouse; Admin sees all.
     """
-    queryset = StockMovement.objects.all().select_related("warehouse", "product", "user").order_by("-created_at")
+
+    queryset = (
+        StockMovement.objects.all()
+        .select_related("warehouse", "product", "user")
+        .order_by("-created_at")
+    )
     serializer_class = StockMovementSerializer
     permission_classes = [IsWarehouseManager]
 

@@ -1,8 +1,8 @@
-from django.http import JsonResponse, HttpResponse
-from django.db import connection
-from pathlib import Path
-from django.conf import settings
 import logging
+
+from django.conf import settings
+from django.db import connection
+from django.http import HttpResponse, JsonResponse
 
 logger = logging.getLogger(__name__)
 

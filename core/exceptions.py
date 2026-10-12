@@ -1,15 +1,23 @@
-from rest_framework.views import exception_handler
-from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.exceptions import APIException
 import logging
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import exception_handler
 
 logger = logging.getLogger(__name__)
 
 
 class DomainError(Exception):
     """Base class for all business logic / domain errors."""
-    def __init__(self, message: str, code: str = "domain_error", status_code: int = 400, fields: dict = None, details: dict = None):
+
+    def __init__(
+        self,
+        message: str,
+        code: str = "domain_error",
+        status_code: int = 400,
+        fields: dict = None,
+        details: dict = None,
+    ):
         super().__init__(message)
         self.message = message
         self.code = code
@@ -83,16 +91,32 @@ def custom_exception_handler(exc, context):
                 message = str(response.data[0]) if response.data else message
         elif response.status_code == status.HTTP_401_UNAUTHORIZED:
             error_code = "not_authenticated"
-            message = response.data.get("detail", "Authentication credentials were not provided.") if isinstance(response.data, dict) else "Not authenticated."
+            message = (
+                response.data.get("detail", "Authentication credentials were not provided.")
+                if isinstance(response.data, dict)
+                else "Not authenticated."
+            )
         elif response.status_code == status.HTTP_403_FORBIDDEN:
             error_code = "permission_denied"
-            message = response.data.get("detail", "You do not have permission to perform this action.") if isinstance(response.data, dict) else "Permission denied."
+            message = (
+                response.data.get("detail", "You do not have permission to perform this action.")
+                if isinstance(response.data, dict)
+                else "Permission denied."
+            )
         elif response.status_code == status.HTTP_404_NOT_FOUND:
             error_code = "not_found"
-            message = response.data.get("detail", "Not found.") if isinstance(response.data, dict) else "Not found."
+            message = (
+                response.data.get("detail", "Not found.")
+                if isinstance(response.data, dict)
+                else "Not found."
+            )
         elif response.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
             error_code = "throttled"
-            message = response.data.get("detail", "Request was throttled.") if isinstance(response.data, dict) else "Throttled."
+            message = (
+                response.data.get("detail", "Request was throttled.")
+                if isinstance(response.data, dict)
+                else "Throttled."
+            )
 
         response.data = {
             "error": {

@@ -1,28 +1,28 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status, viewsets
-from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import login, logout
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
-from rest_framework.exceptions import PermissionDenied, NotFound
+from rest_framework import viewsets
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import User
-from .serializers import (
-    UserSerializer,
-    LoginSerializer,
-    ChangePasswordSerializer,
-)
+from audit.models import AuditLog
 from core.permissions import (
-    IsAdmin,
-    IsWarehouseManager,
     ROLE_ADMIN,
     ROLE_MANAGER,
     ROLE_STAFF,
+    IsWarehouseManager,
     get_user_role,
 )
-from audit.models import AuditLog
+
+from .models import User
+from .serializers import (
+    ChangePasswordSerializer,
+    LoginSerializer,
+    UserSerializer,
+)
 
 
 class CsrfView(APIView):
@@ -121,10 +121,14 @@ class UserViewSet(viewsets.ModelViewSet):
             profile = getattr(user, "profile", None)
             if not profile or not profile.warehouse_id:
                 return User.objects.none()
-            return User.objects.filter(
-                profile__warehouse_id=profile.warehouse_id,
-                groups__name=ROLE_STAFF,
-            ).select_related("profile__warehouse").prefetch_related("groups")
+            return (
+                User.objects.filter(
+                    profile__warehouse_id=profile.warehouse_id,
+                    groups__name=ROLE_STAFF,
+                )
+                .select_related("profile__warehouse")
+                .prefetch_related("groups")
+            )
 
         return User.objects.none()
 

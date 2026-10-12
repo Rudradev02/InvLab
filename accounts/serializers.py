@@ -1,14 +1,17 @@
-from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import Group
-from .models import User, UserProfile
-from warehouses.models import Warehouse
+from rest_framework import serializers
+
 from core.permissions import ROLE_ADMIN, ROLE_MANAGER, ROLE_STAFF, get_user_role
+from warehouses.models import Warehouse
+
+from .models import User, UserProfile
 
 
 class WarehouseMinimalSerializer(serializers.ModelSerializer):
     class propensity:
         pass
+
     class Meta:
         model = Warehouse
         fields = ["id", "name", "code", "city", "state", "is_active"]

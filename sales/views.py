@@ -1,21 +1,24 @@
-from rest_framework import viewsets, status
-from rest_framework.response import Response
+from rest_framework import status, viewsets
 from rest_framework.exceptions import PermissionDenied
-from .models import Sale
-from .serializers import SaleSerializer, CreateSaleRequestSerializer
-from .services import create_sale
-from core.scoping import WarehouseScopeMixin
+from rest_framework.response import Response
+
 from core.permissions import (
-    IsStaff,
     ROLE_ADMIN,
-    ROLE_MANAGER,
     ROLE_STAFF,
+    IsStaff,
     get_user_role,
 )
+from core.scoping import WarehouseScopeMixin
+
+from .models import Sale
+from .serializers import CreateSaleRequestSerializer, SaleSerializer
+from .services import create_sale
 
 
 class SaleViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
-    queryset = Sale.objects.all().select_related("warehouse", "user").prefetch_related("lines__product")
+    queryset = (
+        Sale.objects.all().select_related("warehouse", "user").prefetch_related("lines__product")
+    )
     serializer_class = SaleSerializer
     permission_classes = [IsStaff]
 

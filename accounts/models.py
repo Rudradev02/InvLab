@@ -10,6 +10,7 @@ class User(AbstractUser):
 
     def get_role(self) -> str:
         from core.permissions import get_user_role
+
         return get_user_role(self) or "Staff"
 
     def __str__(self):

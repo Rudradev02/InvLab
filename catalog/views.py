@@ -1,17 +1,16 @@
-from rest_framework import viewsets, filters, status
-from rest_framework.response import Response
+from rest_framework import filters, status, viewsets
 from rest_framework.exceptions import PermissionDenied
-from .models import Category, Product
-from .serializers import CategorySerializer, ProductSerializer
+from rest_framework.response import Response
+
 from core.permissions import (
-    IsStaff,
-    IsWarehouseManager,
-    IsAdmin,
     ROLE_ADMIN,
     ROLE_MANAGER,
+    IsStaff,
     get_user_role,
 )
-from audit.models import AuditLog
+
+from .models import Category, Product
+from .serializers import CategorySerializer, ProductSerializer
 
 
 class CategoryViewSet(viewsets.ModelViewSet):

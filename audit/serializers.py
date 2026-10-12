@@ -1,7 +1,6 @@
 from rest_framework import serializers
+
 from .models import AuditLog
-from accounts.models import User
-from warehouses.models import Warehouse
 
 
 class AuditLogSerializer(serializers.ModelSerializer):

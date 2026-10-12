@@ -23,12 +23,14 @@ def get_user_role(user) -> str | None:
 
 class IsAdmin(BasePermission):
     """Allows access only to Admin users."""
+
     def has_permission(self, request, view):
         return get_user_role(request.user) == ROLE_ADMIN
 
 
 class IsWarehouseManager(BasePermission):
     """Allows access to Admin or Warehouse Manager."""
+
     def has_permission(self, request, view):
         role = get_user_role(request.user)
         return role in (ROLE_ADMIN, ROLE_MANAGER)
@@ -36,6 +38,7 @@ class IsWarehouseManager(BasePermission):
 
 class IsStaff(BasePermission):
     """Allows access to any valid staff, manager, or admin."""
+
     def has_permission(self, request, view):
         role = get_user_role(request.user)
         return role in (ROLE_ADMIN, ROLE_MANAGER, ROLE_STAFF)
@@ -43,6 +46,7 @@ class IsStaff(BasePermission):
 
 class IsWarehouseStaffOrManager(BasePermission):
     """Allows access specifically to Staff or Manager of their assigned warehouse."""
+
     def has_permission(self, request, view):
         role = get_user_role(request.user)
         return role in (ROLE_MANAGER, ROLE_STAFF)

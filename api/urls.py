@@ -1,21 +1,20 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from accounts.views import (
+    ChangePasswordView,
     CsrfView,
     LoginView,
     LogoutView,
     MeView,
-    ChangePasswordView,
     UserViewSet,
 )
-from warehouses.views import WarehouseViewSet
+from audit.views import AuditLogViewSet
 from catalog.views import CategoryViewSet, ProductViewSet
 from inventory.views import StockLevelViewSet, StockMovementViewSet
 from sales.views import SaleViewSet
 from transfers.views import StockTransferViewSet
-from audit.views import AuditLogViewSet
+from warehouses.views import WarehouseViewSet
 
 router = DefaultRouter()
 router.register(r"users", UserViewSet, basename="user")
@@ -35,7 +34,6 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="auth-logout"),
     path("auth/me/", MeView.as_view(), name="auth-me"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
-
     # Router endpoints under /api/v1/
     path("", include(router.urls)),
 ]

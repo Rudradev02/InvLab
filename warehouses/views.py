@@ -1,23 +1,22 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied, NotFound
-from django.db.models import Count, Sum, Q, F
-from django.utils import timezone
 from datetime import timedelta
 
-from .models import Warehouse
-from .serializers import WarehouseSerializer, WarehouseOverviewSerializer
+from django.db.models import Count, F, Q, Sum
+from django.utils import timezone
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.response import Response
+
+from audit.models import AuditLog
 from core.permissions import (
-    IsAdmin,
-    IsWarehouseManager,
-    IsStaff,
     ROLE_ADMIN,
-    ROLE_MANAGER,
-    ROLE_STAFF,
+    IsAdmin,
+    IsStaff,
     get_user_role,
 )
-from audit.models import AuditLog
+
+from .models import Warehouse
+from .serializers import WarehouseOverviewSerializer, WarehouseSerializer
 
 
 class WarehouseViewSet(viewsets.ModelViewSet):
@@ -29,14 +28,20 @@ class WarehouseViewSet(viewsets.ModelViewSet):
         role = get_user_role(user)
 
         if role == ROLE_ADMIN:
-            return Warehouse.objects.all().select_related("manager").prefetch_related("staff_members")
+            return (
+                Warehouse.objects.all().select_related("manager").prefetch_related("staff_members")
+            )
 
         profile = getattr(user, "profile", None)
         if not profile or not profile.warehouse_id:
             return Warehouse.objects.none()
 
         # Manager and Staff only see their own warehouse
-        return Warehouse.objects.filter(pk=profile.warehouse_id).select_related("manager").prefetch_related("staff_members")
+        return (
+            Warehouse.objects.filter(pk=profile.warehouse_id)
+            .select_related("manager")
+            .prefetch_related("staff_members")
+        )
 
     def create(self, request, *args, **kwargs):
         if get_user_role(request.user) != ROLE_ADMIN:
@@ -88,30 +93,38 @@ class WarehouseViewSet(viewsets.ModelViewSet):
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
         thirty_days_ago = timezone.now() - timedelta(days=30)
 
-        warehouses = Warehouse.objects.all().select_related("manager").annotate(
-            staff_count=Count("staff_members", filter=Q(staff_members__user__is_active=True), distinct=True),
-            products_stocked=Count("stock_levels", filter=Q(stock_levels__quantity__gt=0), distinct=True),
-            total_units=Sum("stock_levels__quantity", default=0),
-            low_stock_count=Count(
-                "stock_levels",
-                filter=Q(stock_levels__quantity__lte=F("stock_levels__reorder_level")),
-                distinct=True,
-            ),
-            sales_today=Sum(
-                "sales__total_amount",
-                filter=Q(sales__created_at__gte=today_start),
-                default=0,
-            ),
-            sales_30d=Sum(
-                "sales__total_amount",
-                filter=Q(sales__created_at__gte=thirty_days_ago),
-                default=0,
-            ),
-            pending_transfers=Count(
-                "transfers_received",
-                filter=Q(transfers_received__status__in=["dispatched"]),
-                distinct=True,
-            ),
+        warehouses = (
+            Warehouse.objects.all()
+            .select_related("manager")
+            .annotate(
+                staff_count=Count(
+                    "staff_members", filter=Q(staff_members__user__is_active=True), distinct=True
+                ),
+                products_stocked=Count(
+                    "stock_levels", filter=Q(stock_levels__quantity__gt=0), distinct=True
+                ),
+                total_units=Sum("stock_levels__quantity", default=0),
+                low_stock_count=Count(
+                    "stock_levels",
+                    filter=Q(stock_levels__quantity__lte=F("stock_levels__reorder_level")),
+                    distinct=True,
+                ),
+                sales_today=Sum(
+                    "sales__total_amount",
+                    filter=Q(sales__created_at__gte=today_start),
+                    default=0,
+                ),
+                sales_30d=Sum(
+                    "sales__total_amount",
+                    filter=Q(sales__created_at__gte=thirty_days_ago),
+                    default=0,
+                ),
+                pending_transfers=Count(
+                    "transfers_received",
+                    filter=Q(transfers_received__status__in=["dispatched"]),
+                    distinct=True,
+                ),
+            )
         )
 
         serializer = WarehouseOverviewSerializer(warehouses, many=True)

@@ -1,10 +1,11 @@
 from django.db import transaction
-from django.core.exceptions import ValidationError
-from .models import StockLevel, StockMovement
-from catalog.models import Product
-from warehouses.models import Warehouse
-from core.exceptions import InsufficientStockError, DomainError
+
 from audit.models import AuditLog
+from catalog.models import Product
+from core.exceptions import DomainError, InsufficientStockError
+from warehouses.models import Warehouse
+
+from .models import StockLevel, StockMovement
 
 
 def get_or_create_locked_stock_level(warehouse_id: int, product_id: int) -> StockLevel:
@@ -12,10 +13,14 @@ def get_or_create_locked_stock_level(warehouse_id: int, product_id: int) -> Stoc
     Lock or create a StockLevel row for the given warehouse and product.
     Must be called inside transaction.atomic().
     """
-    stock_level = StockLevel.objects.select_for_update().filter(
-        warehouse_id=warehouse_id,
-        product_id=product_id,
-    ).first()
+    stock_level = (
+        StockLevel.objects.select_for_update()
+        .filter(
+            warehouse_id=warehouse_id,
+            product_id=product_id,
+        )
+        .first()
+    )
 
     if not stock_level:
         warehouse = Warehouse.objects.get(pk=warehouse_id)
@@ -28,7 +33,9 @@ def get_or_create_locked_stock_level(warehouse_id: int, product_id: int) -> Stoc
     return stock_level
 
 
-def receive_stock(warehouse_id: int, product_id: int, quantity: int, user, reference: str = "") -> StockLevel:
+def receive_stock(
+    warehouse_id: int, product_id: int, quantity: int, user, reference: str = ""
+) -> StockLevel:
     """
     Receive new stock into warehouse. Idempotent and thread-safe.
     Hard rules: atomic, row-locking, exact 1 movement per change.
@@ -57,13 +64,19 @@ def receive_stock(warehouse_id: int, product_id: int, quantity: int, user, refer
             entity_type="stock_level",
             entity_id=str(stock_level.id),
             warehouse_id=warehouse_id,
-            details={"product_id": product_id, "delta": quantity, "new_quantity": stock_level.quantity},
+            details={
+                "product_id": product_id,
+                "delta": quantity,
+                "new_quantity": stock_level.quantity,
+            },
         )
 
         return stock_level
 
 
-def adjust_stock(warehouse_id: int, product_id: int, delta: int, user, reason: str = "") -> StockLevel:
+def adjust_stock(
+    warehouse_id: int, product_id: int, delta: int, user, reason: str = ""
+) -> StockLevel:
     """
     Adjust existing stock (positive or negative).
     Checks that stock never goes below 0.
@@ -78,7 +91,11 @@ def adjust_stock(warehouse_id: int, product_id: int, delta: int, user, reason: s
         if new_quantity < 0:
             raise InsufficientStockError(
                 f"Cannot adjust stock by {delta}. Only {stock_level.quantity} units are available in {stock_level.warehouse.name}.",
-                details={"product_id": product_id, "available": stock_level.quantity, "requested_delta": delta},
+                details={
+                    "product_id": product_id,
+                    "available": stock_level.quantity,
+                    "requested_delta": delta,
+                },
             )
 
         stock_level.quantity = new_quantity
@@ -100,7 +117,12 @@ def adjust_stock(warehouse_id: int, product_id: int, delta: int, user, reason: s
             entity_type="stock_level",
             entity_id=str(stock_level.id),
             warehouse_id=warehouse_id,
-            details={"product_id": product_id, "delta": delta, "new_quantity": stock_level.quantity, "reason": reason},
+            details={
+                "product_id": product_id,
+                "delta": delta,
+                "new_quantity": stock_level.quantity,
+                "reason": reason,
+            },
         )
 
         return stock_level

@@ -1,15 +1,15 @@
 from decimal import Decimal
-from django.core.management.base import BaseCommand
+
 from django.contrib.auth.models import Group
+from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from accounts.models import User, UserProfile
-from warehouses.models import Warehouse
 from catalog.models import Category, Product
-from inventory.models import StockLevel, StockMovement
+from core.permissions import ROLE_ADMIN, ROLE_MANAGER, ROLE_STAFF
 from inventory.services import receive_stock
 from sales.services import create_sale
-from core.permissions import ROLE_ADMIN, ROLE_MANAGER, ROLE_STAFF
+from warehouses.models import Warehouse
 
 
 class Command(BaseCommand):
@@ -134,11 +134,23 @@ class Command(BaseCommand):
 
             # 7. Products
             products_data = [
-                ("SKU-ST-001", "Heavy Duty Steel Shelving Unit (4-Tier)", cat_storage, "4500.00", 5),
+                (
+                    "SKU-ST-001",
+                    "Heavy Duty Steel Shelving Unit (4-Tier)",
+                    cat_storage,
+                    "4500.00",
+                    5,
+                ),
                 ("SKU-ST-002", "Industrial Plastic Storage Crate 60L", cat_storage, "650.00", 15),
                 ("SKU-MH-001", "Hydraulic Hand Pallet Truck 2500kg", cat_handling, "18500.00", 2),
                 ("SKU-MH-002", "Heavy Duty Platform Trolley 300kg", cat_handling, "3200.00", 4),
-                ("SKU-PK-001", "Corrugated Shipping Boxes 12x10x8 (Bundle of 25)", cat_pack, "850.00", 20),
+                (
+                    "SKU-PK-001",
+                    "Corrugated Shipping Boxes 12x10x8 (Bundle of 25)",
+                    cat_pack,
+                    "850.00",
+                    20,
+                ),
                 ("SKU-PK-002", "Industrial Stretch Film Roll 500mm", cat_pack, "420.00", 25),
                 ("SKU-SF-001", "Industrial Safety Helmet ANSI Z89.1", cat_safety, "380.00", 10),
                 ("SKU-SF-002", "High-Visibility Reflective Safety Vest", cat_safety, "190.00", 15),

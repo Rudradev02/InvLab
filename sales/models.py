@@ -1,5 +1,6 @@
-from django.db import models
 from django.conf import settings
+from django.db import models
+
 from core.models import TimestampedModel
 
 
@@ -31,7 +32,9 @@ class Sale(TimestampedModel):
 
 class SaleLine(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="lines")
-    product = models.ForeignKey("catalog.Product", on_delete=models.PROTECT, related_name="sale_lines")
+    product = models.ForeignKey(
+        "catalog.Product", on_delete=models.PROTECT, related_name="sale_lines"
+    )
     quantity = models.PositiveIntegerField()
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
