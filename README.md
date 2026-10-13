@@ -50,7 +50,47 @@ Python 3.12, Django 5.2, Django REST Framework, PostgreSQL; React 19, TypeScript
 
 ## Quick start
 
-Filled in during milestone M0, once the project scaffold exists.
+### 1. Prerequisites
+- Python 3.12+
+- Node.js 20+ (with npm)
+- Docker & Docker Compose (optional for containerized run)
+
+### 2. Local Setup
+
+```bash
+# 1. Backend setup
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .\.venv\Scripts\activate
+pip install -r requirements-dev.txt
+
+# 2. Database migrations and initial seed
+python manage.py migrate
+python manage.py seed_data
+
+# 3. Start Django development server
+python manage.py runserver 8000
+```
+
+In a second terminal:
+
+```bash
+# 4. Frontend setup
+cd frontend
+npm install
+npm run dev  # Vite server runs on http://localhost:5173
+```
+
+### 3. Docker Compose (Alternative)
+
+```bash
+docker compose up --build
+docker compose exec web python manage.py seed_data
+```
+
+### 4. Demo Logins
+- **Admin**: `admin` / `Admin@123` (Full multi-warehouse access)
+- **Manager**: `rahul.manager` / `Manager@123` (Pune Central Warehouse)
+- **Staff**: `arun.staff` / `Staff@123` (Counter POS & Receiving)
 
 ## Licence
 

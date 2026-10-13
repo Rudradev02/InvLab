@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: invlab_db
+    environment:
+      POSTGRES_DB: invlab
+      POSTGRES_USER: invlab
+      POSTGRES_PASSWORD: invlab_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U invlab -d invlab"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: invlab_web
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: "compose-dev-secret-key-replace-in-production"
+      DJANGO_DEBUG: "1"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,web"
+      DATABASE_URL: "postgresql://invlab:invlab_password@db:5432/invlab"
+      TIME_ZONE: "Asia/Kolkata"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
