@@ -100,9 +100,9 @@ class Command(BaseCommand):
                 wh.save(update_fields=["manager"])
                 return u
 
-            mgr_pune = create_mgr("rahul.manager", "Rahul", "Sharma", wh_pune)
-            mgr_mumbai = create_mgr("priya.manager", "Priya", "Patel", wh_mumbai)
-            mgr_blr = create_mgr("vikram.manager", "Vikram", "Rao", wh_blr)
+            create_mgr("rahul.manager", "Rahul", "Sharma", wh_pune)
+            create_mgr("priya.manager", "Priya", "Patel", wh_mumbai)
+            create_mgr("vikram.manager", "Vikram", "Rao", wh_blr)
 
             # 5. Staff
             def create_staff(username, first, last, wh):
@@ -123,8 +123,8 @@ class Command(BaseCommand):
                 return u
 
             staff_pune = create_staff("arun.staff", "Arun", "Kumar", wh_pune)
-            staff_mumbai = create_staff("sneha.staff", "Sneha", "Deshmukh", wh_mumbai)
-            staff_blr = create_staff("kavita.staff", "Kavita", "Nair", wh_blr)
+            create_staff("sneha.staff", "Sneha", "Deshmukh", wh_mumbai)
+            create_staff("kavita.staff", "Kavita", "Nair", wh_blr)
 
             # 6. Categories
             cat_storage, _ = Category.objects.get_or_create(name="Storage & Racks")
