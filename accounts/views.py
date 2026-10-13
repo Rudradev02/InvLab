@@ -26,6 +26,7 @@ from .serializers import (
 
 
 class CsrfView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     @method_decorator(ensure_csrf_cookie)
@@ -35,8 +36,10 @@ class CsrfView(APIView):
 
 
 class LoginView(APIView):
+    authentication_classes = []
     permission_classes = [AllowAny]
 
+    @method_decorator(ensure_csrf_cookie)
     def post(self, request):
         serializer = LoginSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -52,23 +55,30 @@ class LoginView(APIView):
             details={"ip": request.META.get("REMOTE_ADDR")},
         )
 
-        return Response(UserSerializer(user).data)
+        user_data = UserSerializer(user).data
+        # Return rotated CSRF token so frontend can track it explicitly
+        token = get_token(request)
+        return Response({**user_data, "csrfToken": token})
 
 
 class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
+    authentication_classes = []
+    permission_classes = [AllowAny]
 
+    @method_decorator(ensure_csrf_cookie)
     def post(self, request):
         user = request.user
-        AuditLog.objects.create(
-            user=user,
-            action="logout",
-            entity_type="user",
-            entity_id=str(user.id),
-            warehouse=getattr(getattr(user, "profile", None), "warehouse", None),
-        )
+        if user and user.is_authenticated:
+            AuditLog.objects.create(
+                user=user,
+                action="logout",
+                entity_type="user",
+                entity_id=str(user.id),
+                warehouse=getattr(getattr(user, "profile", None), "warehouse", None),
+            )
         logout(request)
-        return Response({"message": "Logged out successfully."})
+        token = get_token(request)
+        return Response({"message": "Logged out successfully.", "csrfToken": token})
 
 
 class MeView(APIView):

@@ -22,6 +22,7 @@ class StockLevel(TimestampedModel):
 
     class Meta:
         db_table = "inventory_stock_level"
+        ordering = ["warehouse", "product"]
         unique_together = ("warehouse", "product")
         constraints = [
             models.CheckConstraint(

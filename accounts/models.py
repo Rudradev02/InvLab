@@ -7,6 +7,7 @@ class User(AbstractUser):
 
     class Meta:
         db_table = "accounts_user"
+        ordering = ["id"]
 
     def get_role(self) -> str:
         from core.permissions import get_user_role
