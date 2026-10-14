@@ -8,7 +8,7 @@ Suggested Build Order: 22, 21, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 |---|---|---|---|---|
 | 22 | GitHub Actions CI | done | `daf2a67` | Two jobs (backend + frontend), PostgreSQL service, npm scripts |
 | 21 | Concurrency test for overselling | done | `aab8a9e` | TransactionTestCase with threads & barrier on PostgreSQL |
-| 1 | Warehouses, roles and scoping | todo | - | Multi-warehouse, roles, scoping mixin & permission classes |
+| 1 | Warehouses, roles and scoping | done | `11b4a27` | Multi-warehouse, roles, scoping mixin & permission classes, Can auth guard |
 | 2 | Stock movement ledger | todo | - | Immutable StockMovement ledger & history |
 | 3 | Separate stock per warehouse | todo | - | StockLevel per warehouse + product |
 | 4 | Admin panel with a Warehouses overview | todo | - | Warehouses CRUD, Users CRUD, aggregation endpoints |
