@@ -2,15 +2,36 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '../lib/api';
-import { StockLevel, Sale, StockMovement, PaginatedResponse } from '../types';
+import { StockLevel, Sale, StockMovement, PaginatedResponse, WarehouseFullDetail } from '../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { StockIndicator } from '../components/ui/stock-indicator';
+import { Badge } from '../components/ui/badge';
 import { formatCurrency, formatNumber, formatDate } from '../lib/format';
-import { Package, AlertTriangle, TrendingUp, Boxes, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import {
+  Package,
+  AlertTriangle,
+  TrendingUp,
+  Boxes,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Building2,
+  MapPin,
+  Phone,
+  Mail,
+  Users as UsersIcon,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const DashboardPage: React.FC = () => {
   const { user, selectedWarehouseId } = useAuth();
+  const isManager = user?.role === 'Warehouse Manager';
+
+  // Query manager warehouse full details if Warehouse Manager
+  const { data: myWarehouseData } = useQuery({
+    queryKey: ['my-warehouse-detail'],
+    queryFn: () => apiRequest<WarehouseFullDetail>('warehouses/my-warehouse/'),
+    enabled: isManager,
+  });
 
   // Query stock levels
   const { data: stockData, isLoading: stockLoading } = useQuery({
@@ -64,6 +85,14 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {isManager && (
+            <Link
+              to="/users"
+              className="inline-flex items-center gap-2 h-9 px-3 rounded-md bg-white border border-[#E3E1DA] text-[#202521] text-xs font-semibold hover:bg-[#F8F8F5] transition-colors"
+            >
+              <UsersIcon className="w-3.5 h-3.5 text-[#173D32]" /> My Staff
+            </Link>
+          )}
           <Link
             to="/sales"
             className="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-[#173D32] text-white text-sm font-medium hover:bg-[#122e26] transition-colors shadow-xs"
@@ -72,6 +101,56 @@ export const DashboardPage: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {/* Read-only Warehouse Contact Card for Warehouse Manager */}
+      {isManager && myWarehouseData && (
+        <Card className="bg-[#F8F8F5] border-[#E3E1DA]">
+          <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-[#173D32]" />
+                <span className="font-bold text-sm text-[#202521]">{myWarehouseData.warehouse.name}</span>
+                <span className="font-mono text-xs font-bold text-[#173D32] bg-[#E6F2EA] px-2 py-0.5 rounded">
+                  {myWarehouseData.warehouse.code}
+                </span>
+                <Badge variant={myWarehouseData.warehouse.is_active ? 'success' : 'error'}>
+                  {myWarehouseData.warehouse.is_active ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#5E6B63] pt-1">
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-[#5E6B63]" />
+                  {myWarehouseData.warehouse.address_line1}, {myWarehouseData.warehouse.city}, {myWarehouseData.warehouse.state} — {myWarehouseData.warehouse.pincode}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-[#5E6B63]" />
+                  {myWarehouseData.warehouse.phone}
+                </span>
+                {myWarehouseData.warehouse.email && (
+                  <span className="flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5 text-[#5E6B63]" />
+                    {myWarehouseData.warehouse.email}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-[#E3E1DA]/80">
+              <div className="text-right text-xs">
+                <div className="text-[11px] text-[#5E6B63]">Active Facility Staff</div>
+                <div className="font-bold text-[#173D32]">{myWarehouseData.staff.length} team members</div>
+              </div>
+              <div className="text-right text-xs pl-3 border-l border-[#E3E1DA]">
+                <div className="text-[11px] text-[#5E6B63]">Sales Today</div>
+                <div className="font-bold text-[#2F7D4F] tabular-nums">
+                  ₹{parseFloat(myWarehouseData.summary.sales_today_amount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

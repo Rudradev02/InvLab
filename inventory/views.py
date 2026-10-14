@@ -6,6 +6,7 @@ from rest_framework.response import Response
 
 from core.permissions import (
     ROLE_ADMIN,
+    ROLE_MANAGER,
     IsStaff,
     IsWarehouseManager,
     get_user_role,
@@ -22,7 +23,7 @@ from .serializers import (
 from .services import adjust_stock, receive_stock
 
 
-class StockLevelViewSet(WarehouseScopeMixin, viewsets.ReadOnlyModelViewSet):
+class StockLevelViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
     queryset = StockLevel.objects.all().select_related("warehouse", "product", "product__category")
     serializer_class = StockLevelSerializer
     permission_classes = [IsStaff]
@@ -37,6 +38,102 @@ class StockLevelViewSet(WarehouseScopeMixin, viewsets.ReadOnlyModelViewSet):
         elif status_filter == "in_stock":
             qs = qs.filter(quantity__gt=0)
         return qs
+
+    def create(self, request, *args, **kwargs):
+        role = get_user_role(request.user)
+        if role not in (ROLE_ADMIN, ROLE_MANAGER):
+            raise PermissionDenied("Only Admin and Warehouse Managers can add products to a warehouse.")
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated_data = serializer.validated_data
+
+        product = validated_data["product"]
+        reorder_level = validated_data.get("reorder_level", product.default_reorder_level or 5)
+        initial_quantity = validated_data.get("initial_quantity", 0)
+
+        if role == ROLE_MANAGER:
+            manager_wh_id = getattr(getattr(request.user, "profile", None), "warehouse_id", None)
+            if not manager_wh_id:
+                raise PermissionDenied("Manager has no assigned warehouse.")
+            target_wh_obj = validated_data.get("warehouse")
+            if target_wh_obj and target_wh_obj.id != manager_wh_id:
+                raise PermissionDenied("Managers cannot manage stock in other warehouses.")
+            warehouse_id = manager_wh_id
+        else:
+            wh_obj = validated_data.get("warehouse")
+            if not wh_obj:
+                raise PermissionDenied("Admin must specify warehouse.")
+            warehouse_id = wh_obj.id
+
+        from warehouses.models import Warehouse
+
+        warehouse = Warehouse.objects.get(pk=warehouse_id)
+
+        if StockLevel.objects.filter(warehouse=warehouse, product=product).exists():
+            return Response(
+                {
+                    "detail": f"Product '{product.name}' is already registered in warehouse '{warehouse.name}'."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if initial_quantity > 0:
+            stock_level = receive_stock(
+                warehouse_id=warehouse.id,
+                product_id=product.id,
+                quantity=initial_quantity,
+                user=request.user,
+                reference="Initial Stock Allocation",
+            )
+            if reorder_level != stock_level.reorder_level:
+                stock_level.reorder_level = reorder_level
+                stock_level.save(update_fields=["reorder_level"])
+        else:
+            stock_level = StockLevel.objects.create(
+                warehouse=warehouse,
+                product=product,
+                quantity=0,
+                reorder_level=reorder_level,
+            )
+
+        return Response(StockLevelSerializer(stock_level).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        role = get_user_role(request.user)
+        if role not in (ROLE_ADMIN, ROLE_MANAGER):
+            raise PermissionDenied("Only Admin and Warehouse Managers can update stock levels.")
+
+        instance = self.get_object()
+        if "quantity" in request.data and int(request.data["quantity"]) != instance.quantity:
+            raise PermissionDenied(
+                "Direct modification of stock quantity is not permitted. Use receive or adjust actions."
+            )
+
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        role = get_user_role(request.user)
+        if role not in (ROLE_ADMIN, ROLE_MANAGER):
+            raise PermissionDenied("Only Admin and Warehouse Managers can update stock levels.")
+
+        instance = self.get_object()
+        if "quantity" in request.data and int(request.data["quantity"]) != instance.quantity:
+            raise PermissionDenied(
+                "Direct modification of stock quantity is not permitted. Use receive or adjust actions."
+            )
+
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if get_user_role(request.user) != ROLE_ADMIN:
+            raise PermissionDenied("Only Admin can delete stock levels.")
+        instance = self.get_object()
+        if instance.quantity > 0 or instance.movements.exists():
+            raise PermissionDenied(
+                "Cannot delete stock level with recorded history or non-zero quantity."
+            )
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=["post"], permission_classes=[IsStaff])
     def receive(self, request):

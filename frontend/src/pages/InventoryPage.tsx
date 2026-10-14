@@ -19,23 +19,34 @@ import {
   FileSpreadsheet,
   ArrowDownLeft,
   ArrowUpRight,
+  Plus,
+  Edit,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export const InventoryPage: React.FC = () => {
-  const { selectedWarehouseId } = useAuth();
+  const { user, selectedWarehouseId } = useAuth();
   const queryClient = useQueryClient();
+  const canManageStock = user?.role === 'Admin' || user?.role === 'Warehouse Manager';
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'low' | 'out'>('all');
 
   // Modals state
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [editingStock, setEditingStock] = useState<StockLevel | null>(null);
+  const [newReorderLevel, setNewReorderLevel] = useState(5);
   const [isReceiveOpen, setIsReceiveOpen] = useState(false);
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [selectedStockLevel, setSelectedStockLevel] = useState<StockLevel | null>(null);
   const [detailTab, setDetailTab] = useState<'overview' | 'ledger'>('overview');
 
   // Forms state
+  const [addProductForm, setAddProductForm] = useState({
+    product_id: '',
+    reorder_level: 5,
+    initial_quantity: 0,
+  });
   const [receiveForm, setReceiveForm] = useState({ product_id: '', quantity: 10, reference: '' });
   const [adjustForm, setAdjustForm] = useState({ product_id: '', delta: 0, reason: '' });
 
@@ -142,6 +153,49 @@ export const InventoryPage: React.FC = () => {
     },
   });
 
+  const addStockMutation = useMutation({
+    mutationFn: (data: typeof addProductForm) =>
+      apiRequest('stock/', {
+        method: 'POST',
+        body: JSON.stringify({
+          product_id: Number(data.product_id),
+          reorder_level: Number(data.reorder_level),
+          initial_quantity: Number(data.initial_quantity),
+          warehouse: selectedWarehouseId,
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['ledger'] });
+      toast.success('Product added to warehouse inventory');
+      setIsAddProductOpen(false);
+      setAddProductForm({ product_id: '', reorder_level: 5, initial_quantity: 0 });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Failed to add product to warehouse';
+      toast.error(msg);
+    },
+  });
+
+  const updateReorderMutation = useMutation({
+    mutationFn: ({ id, reorder_level }: { id: number; reorder_level: number }) =>
+      apiRequest(`stock/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ reorder_level }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-inventory'] });
+      toast.success('Reorder level updated');
+      setEditingStock(null);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Failed to update reorder level';
+      toast.error(msg);
+    },
+  });
+
   const getMovementBadgeVariant = (type: string) => {
     switch (type) {
       case 'receive':
@@ -172,6 +226,93 @@ export const InventoryPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Add Product to Warehouse Modal (Admin and Manager) */}
+          {canManageStock && (
+            <Dialog open={isAddProductOpen} onOpenChange={setIsAddProductOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2 cursor-pointer bg-[#173D32] hover:bg-[#122e26] text-white">
+                  <Plus className="w-4 h-4" /> Add Product
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Add Product to Warehouse Stock</DialogTitle>
+                </DialogHeader>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addStockMutation.mutate(addProductForm);
+                  }}
+                  className="space-y-4 mt-3"
+                >
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#5E6B63] mb-1.5">
+                      Select Product from Catalog
+                    </label>
+                    <select
+                      required
+                      value={addProductForm.product_id}
+                      onChange={(e) => {
+                        const pid = e.target.value;
+                        const match = products.find((p) => p.id === Number(pid));
+                        setAddProductForm({
+                          ...addProductForm,
+                          product_id: pid,
+                          reorder_level: match?.default_reorder_level || 5,
+                        });
+                      }}
+                      className="w-full h-10 px-3 py-2 text-sm bg-white border border-[#E3E1DA] rounded-md text-[#202521] focus:ring-2 focus:ring-[#173D32] outline-none"
+                    >
+                      <option value="">-- Choose Catalog SKU --</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.sku})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <Input
+                    label="Reorder Threshold Level"
+                    type="number"
+                    min="1"
+                    required
+                    value={addProductForm.reorder_level}
+                    onChange={(e) =>
+                      setAddProductForm({
+                        ...addProductForm,
+                        reorder_level: Number(e.target.value),
+                      })
+                    }
+                    helperText="Alerts when local warehouse inventory reaches or falls below this amount."
+                  />
+
+                  <Input
+                    label="Initial Stock Quantity (Optional)"
+                    type="number"
+                    min="0"
+                    value={addProductForm.initial_quantity}
+                    onChange={(e) =>
+                      setAddProductForm({
+                        ...addProductForm,
+                        initial_quantity: Number(e.target.value),
+                      })
+                    }
+                    helperText="If greater than 0, an initial ledger entry will automatically be logged."
+                  />
+
+                  <Button
+                    type="submit"
+                    className="w-full bg-[#173D32] text-white"
+                    isLoading={addStockMutation.isPending}
+                  >
+                    Add Product to Inventory
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+
           {/* Receive Stock Modal */}
           <Dialog open={isReceiveOpen} onOpenChange={setIsReceiveOpen}>
             <DialogTrigger asChild>
@@ -414,18 +555,35 @@ export const InventoryPage: React.FC = () => {
                       />
                     </td>
                     <td className="py-3.5 px-5 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedStockLevel(item);
-                          setDetailTab('ledger');
-                        }}
-                        className="text-xs text-[#173D32] hover:text-[#173D32] gap-1.5"
-                      >
-                        <History className="w-3.5 h-3.5" /> Ledger
-                      </Button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {canManageStock && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingStock(item);
+                              setNewReorderLevel(item.reorder_level);
+                            }}
+                            className="text-xs text-[#5E6B63] hover:text-[#173D32] h-7 w-7 p-0"
+                            title="Edit reorder level"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedStockLevel(item);
+                            setDetailTab('ledger');
+                          }}
+                          className="text-xs text-[#173D32] hover:text-[#173D32] gap-1.5"
+                        >
+                          <History className="w-3.5 h-3.5" /> Ledger
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -434,6 +592,51 @@ export const InventoryPage: React.FC = () => {
           )}
         </div>
       </Card>
+
+      {/* Edit Reorder Level Dialog */}
+      <Dialog open={!!editingStock} onOpenChange={(open) => !open && setEditingStock(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Set Reorder Threshold</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (editingStock) {
+                updateReorderMutation.mutate({
+                  id: editingStock.id,
+                  reorder_level: Number(newReorderLevel),
+                });
+              }
+            }}
+            className="space-y-4 mt-3"
+          >
+            <div>
+              <div className="text-xs text-[#5E6B63]">Product:</div>
+              <div className="font-semibold text-sm text-[#202521]">{editingStock?.product.name}</div>
+              <div className="text-[11px] font-mono text-[#5E6B63]">{editingStock?.product.sku}</div>
+            </div>
+
+            <Input
+              label="Reorder Level Threshold"
+              type="number"
+              min="1"
+              required
+              value={newReorderLevel}
+              onChange={(e) => setNewReorderLevel(Number(e.target.value))}
+              helperText="When stock level falls to or below this amount, low-stock warnings will trigger."
+            />
+
+            <Button
+              type="submit"
+              className="w-full bg-[#173D32] text-white"
+              isLoading={updateReorderMutation.isPending}
+            >
+              Update Threshold
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Product Detail Dialog with Ledger Tab */}
       <Dialog

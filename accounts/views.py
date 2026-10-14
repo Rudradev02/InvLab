@@ -168,6 +168,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         user = self.request.user
+        role = get_user_role(user)
         instance = serializer.instance
         old_role = instance.get_role()
         old_warehouse = getattr(getattr(instance, "profile", None), "warehouse", None)
@@ -178,7 +179,20 @@ class UserViewSet(viewsets.ModelViewSet):
             if new_role and new_role != old_role:
                 raise PermissionDenied("You cannot change your own role.")
 
-        # 2. Last active Admin cannot be demoted or deactivated
+        # 2. Manager scoping checks
+        if role == ROLE_MANAGER:
+            manager_wh_id = getattr(getattr(user, "profile", None), "warehouse_id", None)
+            target_wh_id = getattr(getattr(instance, "profile", None), "warehouse_id", None)
+            if target_wh_id != manager_wh_id or old_role != ROLE_STAFF:
+                raise PermissionDenied("Managers can only update Staff accounts in their assigned warehouse.")
+            new_role = self.request.data.get("role_name")
+            if new_role and new_role != ROLE_STAFF:
+                raise PermissionDenied("Managers can only manage Staff accounts.")
+            new_wh_id = self.request.data.get("warehouse_id")
+            if new_wh_id and int(new_wh_id) != manager_wh_id:
+                raise PermissionDenied("Managers cannot reassign staff to other warehouses.")
+
+        # 3. Last active Admin cannot be demoted or deactivated
         if old_role == ROLE_ADMIN or instance.is_superuser:
             admin_count = User.objects.filter(is_active=True, groups__name=ROLE_ADMIN).count()
             if admin_count <= 1:
@@ -210,9 +224,18 @@ class UserViewSet(viewsets.ModelViewSet):
         )
 
     def perform_destroy(self, instance):
+        user = self.request.user
+        role = get_user_role(user)
+
         # Soft delete / deactivate (BR-09, BR-12)
-        if instance == self.request.user:
+        if instance == user:
             raise PermissionDenied("You cannot deactivate your own account.")
+
+        if role == ROLE_MANAGER:
+            manager_wh_id = getattr(getattr(user, "profile", None), "warehouse_id", None)
+            target_wh_id = getattr(getattr(instance, "profile", None), "warehouse_id", None)
+            if target_wh_id != manager_wh_id or instance.get_role() != ROLE_STAFF:
+                raise PermissionDenied("Managers can only deactivate Staff accounts in their assigned warehouse.")
 
         if instance.is_superuser or instance.get_role() == ROLE_ADMIN:
             # Check if this is the last active admin
@@ -231,9 +254,17 @@ class UserViewSet(viewsets.ModelViewSet):
             warehouse=getattr(getattr(instance, "profile", None), "warehouse", None),
         )
 
-    @action(detail=True, methods=["post"], url_path="reset-password", permission_classes=[IsAdmin])
+    @action(detail=True, methods=["post"], url_path="reset-password", permission_classes=[IsWarehouseManager])
     def reset_password(self, request, pk=None):
         target_user = self.get_object()
+        role = get_user_role(request.user)
+
+        if role == ROLE_MANAGER:
+            manager_wh_id = getattr(getattr(request.user, "profile", None), "warehouse_id", None)
+            target_wh_id = getattr(getattr(target_user, "profile", None), "warehouse_id", None)
+            if target_wh_id != manager_wh_id or target_user.get_role() != ROLE_STAFF:
+                raise PermissionDenied("Managers can only reset passwords for staff in their assigned warehouse.")
+
         new_password = request.data.get("new_password") or "InvLab@123"
         target_user.set_password(new_password)
         target_user.must_change_password = True
@@ -241,16 +272,24 @@ class UserViewSet(viewsets.ModelViewSet):
 
         AuditLog.objects.create(
             user=request.user,
-            action="admin_reset_password",
+            action="reset_password",
             entity_type="user",
             entity_id=str(target_user.id),
             warehouse=getattr(getattr(target_user, "profile", None), "warehouse", None),
         )
         return Response({"message": f"Password reset successfully for @{target_user.username}."})
 
-    @action(detail=True, methods=["post"], url_path="activate", permission_classes=[IsAdmin])
+    @action(detail=True, methods=["post"], url_path="activate", permission_classes=[IsWarehouseManager])
     def activate(self, request, pk=None):
         target_user = self.get_object()
+        role = get_user_role(request.user)
+
+        if role == ROLE_MANAGER:
+            manager_wh_id = getattr(getattr(request.user, "profile", None), "warehouse_id", None)
+            target_wh_id = getattr(getattr(target_user, "profile", None), "warehouse_id", None)
+            if target_wh_id != manager_wh_id or target_user.get_role() != ROLE_STAFF:
+                raise PermissionDenied("Managers can only activate staff in their assigned warehouse.")
+
         target_user.is_active = True
         target_user.save(update_fields=["is_active"])
 

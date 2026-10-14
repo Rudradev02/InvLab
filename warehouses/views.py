@@ -10,8 +10,10 @@ from rest_framework.response import Response
 from audit.models import AuditLog
 from core.permissions import (
     ROLE_ADMIN,
+    ROLE_MANAGER,
     IsAdmin,
     IsStaff,
+    IsWarehouseManager,
     get_user_role,
 )
 
@@ -200,10 +202,46 @@ class WarehouseViewSet(viewsets.ModelViewSet):
         serializer = WarehouseOverviewSerializer(warehouses, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["get"], permission_classes=[IsAdmin], url_path="full-detail")
+    @action(
+        detail=False,
+        methods=["get"],
+        permission_classes=[IsWarehouseManager],
+        url_path="my-warehouse",
+    )
+    def my_warehouse(self, request):
+        user = request.user
+        role = get_user_role(user)
+        profile = getattr(user, "profile", None)
+
+        if role == ROLE_ADMIN:
+            warehouse_id = request.query_params.get("warehouse_id")
+            warehouse = (
+                Warehouse.objects.filter(pk=warehouse_id).first()
+                if warehouse_id
+                else Warehouse.objects.filter(is_active=True).first()
+            )
+        else:
+            warehouse_id = getattr(profile, "warehouse_id", None)
+            warehouse = Warehouse.objects.filter(pk=warehouse_id).first() if warehouse_id else None
+
+        if not warehouse:
+            from rest_framework.exceptions import NotFound
+
+            raise NotFound("No assigned warehouse found.")
+
+        return self._build_full_detail_response(warehouse)
+
+    @action(
+        detail=True,
+        methods=["get"],
+        permission_classes=[IsWarehouseManager],
+        url_path="full-detail",
+    )
     def full_detail(self, request, pk=None):
         warehouse = self.get_object()
+        return self._build_full_detail_response(warehouse)
 
+    def _build_full_detail_response(self, warehouse):
         # Staff
         staff_profiles = warehouse.staff_members.select_related("user", "user__profile").all()
         staff_data = [
