@@ -76,6 +76,13 @@ Use threads started together with a barrier, each with its own database connecti
 
 These tests are skipped on SQLite with a clear message. CI runs them against a PostgreSQL service container.
 
+To run the concurrency tests locally against PostgreSQL:
+```bash
+python manage.py test sales.test_concurrency
+```
+On SQLite, the runner will safely skip them with:
+`SkipTest: Concurrency tests require PostgreSQL (row-level locking with threads is not supported on SQLite)`
+
 ### 3.6 Query-count tests
 
 Assert the number of queries for the main list and dashboard endpoints with realistic seeded data so N+1 queries are caught.
