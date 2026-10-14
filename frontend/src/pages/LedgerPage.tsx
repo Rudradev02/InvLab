@@ -9,7 +9,7 @@ import { formatDate } from '../lib/format';
 import { FileSpreadsheet, ArrowDownLeft, ArrowUpRight, Search } from 'lucide-react';
 
 export const LedgerPage: React.FC = () => {
-  const { user, selectedWarehouseId } = useAuth();
+  const { selectedWarehouseId } = useAuth();
   const [movementFilter, setMovementFilter] = useState<string>('');
   const [search, setSearch] = useState<string>('');
 
@@ -28,12 +28,15 @@ export const LedgerPage: React.FC = () => {
     (m) =>
       m.product_name.toLowerCase().includes(search.toLowerCase()) ||
       m.product_sku.toLowerCase().includes(search.toLowerCase()) ||
-      m.reference.toLowerCase().includes(search.toLowerCase())
+      (m.reference && m.reference.toLowerCase().includes(search.toLowerCase())) ||
+      (m.reason && m.reason.toLowerCase().includes(search.toLowerCase())) ||
+      m.username.toLowerCase().includes(search.toLowerCase())
   );
 
   const getMovementBadgeVariant = (type: string) => {
     switch (type) {
       case 'receive':
+      case 'purchase':
       case 'transfer_in':
         return 'success';
       case 'sale':
@@ -41,6 +44,8 @@ export const LedgerPage: React.FC = () => {
         return 'info';
       case 'adjustment':
         return 'warning';
+      case 'initial':
+      case 'return':
       default:
         return 'neutral';
     }
@@ -64,7 +69,7 @@ export const LedgerPage: React.FC = () => {
           <Search className="w-4 h-4 text-[#5E6B63] absolute left-3 top-3" />
           <input
             type="text"
-            placeholder="Search SKU, item, or reference..."
+            placeholder="Search SKU, item, user, reason..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-9 pl-9 pr-3 text-xs bg-[#F8F8F5] border border-[#E3E1DA] rounded-md text-[#202521] outline-none focus:ring-2 focus:ring-[#173D32]"
@@ -82,11 +87,14 @@ export const LedgerPage: React.FC = () => {
             className="h-9 px-3 text-xs bg-[#F8F8F5] border border-[#E3E1DA] rounded-md text-[#202521] outline-none cursor-pointer"
           >
             <option value="">All Movement Types</option>
+            <option value="initial">Initial</option>
             <option value="receive">Receive</option>
+            <option value="purchase">Purchase</option>
             <option value="sale">Sale</option>
             <option value="adjustment">Adjustment</option>
             <option value="transfer_in">Transfer In</option>
             <option value="transfer_out">Transfer Out</option>
+            <option value="return">Return</option>
           </select>
         </div>
       </div>
@@ -112,8 +120,10 @@ export const LedgerPage: React.FC = () => {
                   <th className="py-3 px-5 font-semibold">Warehouse</th>
                   <th className="py-3 px-5 font-semibold">SKU &amp; Product</th>
                   <th className="py-3 px-5 font-semibold">Type</th>
-                  <th className="py-3 px-5 font-semibold text-right">Delta</th>
+                  <th className="py-3 px-5 font-semibold text-right">Signed Delta</th>
+                  <th className="py-3 px-5 font-semibold text-right">Balance After</th>
                   <th className="py-3 px-5 font-semibold">User</th>
+                  <th className="py-3 px-5 font-semibold">Reason</th>
                   <th className="py-3 px-5 font-semibold">Reference</th>
                 </tr>
               </thead>
@@ -140,7 +150,7 @@ export const LedgerPage: React.FC = () => {
                     <td className="py-3 px-5 text-right font-bold tabular-nums">
                       <span
                         className={`inline-flex items-center gap-1 ${
-                          m.delta > 0 ? 'text-[#2F7D4F]' : 'text-[#B3261E]'
+                          m.delta > 0 ? 'text-[#2F7D4F]' : 'text-[#C85A32]'
                         }`}
                       >
                         {m.delta > 0 ? (
@@ -151,7 +161,15 @@ export const LedgerPage: React.FC = () => {
                         {m.delta > 0 ? `+${m.delta}` : m.delta}
                       </span>
                     </td>
+                    <td className="py-3 px-5 text-right font-semibold tabular-nums text-[#202521]">
+                      {m.balance_after !== null && m.balance_after !== undefined
+                        ? m.balance_after
+                        : '—'}
+                    </td>
                     <td className="py-3 px-5 font-medium text-[#202521]">@{m.username}</td>
+                    <td className="py-3 px-5 text-[#202521] max-w-xs truncate">
+                      {m.reason || '—'}
+                    </td>
                     <td className="py-3 px-5 text-[#5E6B63] font-mono text-[11px] truncate max-w-xs">
                       {m.reference || '—'}
                     </td>

@@ -100,6 +100,7 @@ class StockMovementViewSet(
     """
     Stock ledger viewset.
     Strictly scoped: Staff cannot view ledger; Manager sees own warehouse; Admin sees all.
+    Append-only and immutable.
     """
 
     queryset = (
@@ -109,13 +110,48 @@ class StockMovementViewSet(
     )
     serializer_class = StockMovementSerializer
     permission_classes = [IsWarehouseManager]
+    http_method_names = ["get", "head", "options"]
 
     def get_queryset(self):
         qs = super().get_queryset()
-        product_id = self.request.query_params.get("product")
+        params = self.request.query_params
+
+        # Product filter
+        product_id = params.get("product") or params.get("product_id")
         if product_id:
             qs = qs.filter(product_id=product_id)
-        movement_type = self.request.query_params.get("movement_type")
-        if movement_type:
-            qs = qs.filter(movement_type=movement_type)
+
+        # Movement type filter (type or movement_type)
+        m_type = params.get("movement_type") or params.get("type")
+        if m_type:
+            qs = qs.filter(movement_type=m_type)
+
+        # User filter (ID or username)
+        user_param = params.get("user") or params.get("user_id")
+        if user_param:
+            if user_param.isdigit():
+                qs = qs.filter(user_id=int(user_param))
+            else:
+                qs = qs.filter(user__username__iexact=user_param)
+
+        # Date range filter
+        date_from = params.get("date_from") or params.get("start_date")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = params.get("date_to") or params.get("end_date")
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
         return qs
+
+    @action(detail=False, methods=["get"], url_path=r"product/(?P<product_id>\d+)")
+    def product_history(self, request, product_id=None):
+        """Returns paginated stock movement history for a specific product."""
+        qs = self.get_queryset().filter(product_id=product_id)
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)

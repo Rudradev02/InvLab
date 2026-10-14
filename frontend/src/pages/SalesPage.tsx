@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
-import { formatCurrency, formatNumber, formatDate } from '../lib/format';
+import { formatCurrency, formatDate } from '../lib/format';
 import { ShoppingCart, Plus, Trash2, Printer, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 

@@ -104,10 +104,20 @@ export interface StockMovement {
   product_name: string;
   product_sku: string;
   delta: number;
-  movement_type: 'receive' | 'sale' | 'adjustment' | 'transfer_out' | 'transfer_in' | 'return';
+  movement_type:
+    | 'initial'
+    | 'receive'
+    | 'purchase'
+    | 'sale'
+    | 'adjustment'
+    | 'transfer_out'
+    | 'transfer_in'
+    | 'return';
   user: number;
   username: string;
+  reason?: string;
   reference: string;
+  balance_after?: number | null;
   created_at: string;
 }
 

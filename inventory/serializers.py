@@ -58,6 +58,8 @@ class StockMovementSerializer(serializers.ModelSerializer):
             "user",
             "username",
             "reference",
+            "reason",
+            "balance_after",
             "created_at",
         ]
         read_only_fields = fields

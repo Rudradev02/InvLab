@@ -108,7 +108,9 @@ def create_sale(
                 delta=-qty,
                 movement_type="sale",
                 user=user,
+                reason=f"Sale {sale_number}",
                 reference=sale_number,
+                balance_after=stock_level.quantity,
             )
 
             # Server computes totals from product price at time of sale (BR-08)

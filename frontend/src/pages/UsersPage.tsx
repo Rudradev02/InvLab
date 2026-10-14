@@ -8,7 +8,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
-import { UserPlus, Users as UsersIcon, ShieldAlert } from 'lucide-react';
+import { UserPlus, Users as UsersIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 export const UsersPage: React.FC = () => {

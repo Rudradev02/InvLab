@@ -86,7 +86,9 @@ def dispatch_transfer(
                 delta=-qty,
                 movement_type="transfer_out",
                 user=user,
+                reason=f"Transfer dispatch {transfer_number}",
                 reference=transfer_number,
+                balance_after=stock_level.quantity,
             )
 
             StockTransferLine.objects.create(
@@ -153,7 +155,9 @@ def receive_transfer(
                     delta=received_qty,
                     movement_type="transfer_in",
                     user=user,
+                    reason=f"Transfer received {transfer.transfer_number}",
                     reference=transfer.transfer_number,
+                    balance_after=dest_stock.quantity,
                 )
 
         transfer.status = "received"

@@ -44,12 +44,14 @@ class StockLevel(TimestampedModel):
 
 class StockMovement(models.Model):
     MOVEMENT_TYPES = (
+        ("initial", "Initial"),
         ("receive", "Receive"),
+        ("purchase", "Purchase"),
         ("sale", "Sale"),
         ("adjustment", "Adjustment"),
+        ("return", "Return"),
         ("transfer_out", "Transfer Out"),
         ("transfer_in", "Transfer In"),
-        ("return", "Return"),
     )
 
     stock_level = models.ForeignKey(
@@ -69,12 +71,14 @@ class StockMovement(models.Model):
     )
     delta = models.IntegerField()
     movement_type = models.CharField(max_length=30, choices=MOVEMENT_TYPES, db_index=True)
+    reason = models.CharField(max_length=255, blank=True, default="")
+    reference = models.CharField(max_length=120, blank=True, default="")
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="stock_movements",
     )
-    reference = models.CharField(max_length=120, blank=True, default="")
+    balance_after = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
@@ -85,5 +89,13 @@ class StockMovement(models.Model):
             models.Index(fields=["product", "-created_at"]),
         ]
 
+    def save(self, *args, **kwargs):
+        if self.pk and not kwargs.get("force_insert", False):
+            raise ValidationError("StockMovement entries are immutable and cannot be updated.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("StockMovement entries are immutable and cannot be deleted.")
+
     def __str__(self):
-        return f"[{self.movement_type}] {self.delta} of {self.product.sku} at {self.warehouse.code}"
+        return f"[{self.movement_type}] {self.delta} of {self.product.sku} at {self.warehouse.code} (bal: {self.balance_after})"

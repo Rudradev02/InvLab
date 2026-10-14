@@ -55,7 +55,9 @@ def receive_stock(
             delta=quantity,
             movement_type="receive",
             user=user,
+            reason=reference or "Stock received",
             reference=reference or "Stock received",
+            balance_after=stock_level.quantity,
         )
 
         AuditLog.objects.create(
@@ -108,7 +110,9 @@ def adjust_stock(
             delta=delta,
             movement_type="adjustment",
             user=user,
+            reason=reason or "Stock adjustment",
             reference=reason or "Stock adjustment",
+            balance_after=stock_level.quantity,
         )
 
         AuditLog.objects.create(
