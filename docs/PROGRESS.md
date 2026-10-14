@@ -11,7 +11,7 @@ Suggested Build Order: 22, 21, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 | 1 | Warehouses, roles and scoping | done | `11b4a27` | Multi-warehouse, roles, scoping mixin & permission classes, Can auth guard |
 | 2 | Stock movement ledger | done | `eb4f7f2` | Immutable StockMovement ledger, balance_after, reason, and product history |
 | 3 | Separate stock per warehouse | done | `ef041f8` | StockLevel per warehouse + product, cached Product.stock sync, warehouse breakdown UI |
-| 4 | Admin panel with a Warehouses overview | todo | - | Warehouses CRUD, Users CRUD, aggregation endpoints |
+| 4 | Admin panel with a Warehouses overview | done | `aae2706` | Warehouses & Users CRUD, overview analytics, stock chart, 5-tab detail modal |
 | 5 | Warehouse Manager workspace | todo | - | Manager scoped views, staff management |
 | 6 | Staff workspace | todo | - | Staff sales and stock adjustments |
 | 7 | Stock transfers between warehouses | todo | - | StockTransfer dispatch, receive, variance |
