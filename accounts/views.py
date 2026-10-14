@@ -164,6 +164,49 @@ class UserViewSet(viewsets.ModelViewSet):
             details={"username": new_user.username, "role": new_user.get_role()},
         )
 
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = serializer.instance
+        old_role = instance.get_role()
+        old_warehouse = getattr(getattr(instance, "profile", None), "warehouse", None)
+
+        # 1. Nobody changes their own role
+        if instance == user and "role_name" in self.request.data:
+            new_role = self.request.data.get("role_name")
+            if new_role and new_role != old_role:
+                raise PermissionDenied("You cannot change your own role.")
+
+        # 2. Last active Admin cannot be demoted or deactivated
+        if old_role == ROLE_ADMIN or instance.is_superuser:
+            admin_count = User.objects.filter(is_active=True, groups__name=ROLE_ADMIN).count()
+            if admin_count <= 1:
+                new_role = self.request.data.get("role_name")
+                if new_role and new_role != ROLE_ADMIN:
+                    raise PermissionDenied("Cannot demote the last remaining active Admin.")
+                if "is_active" in self.request.data and not self.request.data["is_active"]:
+                    raise PermissionDenied("Cannot deactivate the last remaining active Admin.")
+
+        updated_user = serializer.save()
+        new_role = updated_user.get_role()
+        new_warehouse = getattr(getattr(updated_user, "profile", None), "warehouse", None)
+
+        details = {}
+        if old_role != new_role:
+            details["role_changed"] = {"from": old_role, "to": new_role}
+        old_wh_code = old_warehouse.code if old_warehouse else None
+        new_wh_code = new_warehouse.code if new_warehouse else None
+        if old_wh_code != new_wh_code:
+            details["warehouse_changed"] = {"from": old_wh_code, "to": new_wh_code}
+
+        AuditLog.objects.create(
+            user=user,
+            action="update_user",
+            entity_type="user",
+            entity_id=str(updated_user.id),
+            warehouse=new_warehouse or old_warehouse,
+            details=details,
+        )
+
     def perform_destroy(self, instance):
         # Soft delete / deactivate (BR-09, BR-12)
         if instance == self.request.user:

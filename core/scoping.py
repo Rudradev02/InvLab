@@ -32,7 +32,10 @@ class WarehouseScopeMixin:
         # Warehouse Manager and Staff are strictly scoped to their assigned warehouse
         profile = getattr(user, "profile", None)
         if not profile or not profile.warehouse_id:
-            return qs.none()
+            raise PermissionDenied("You must be assigned to an active warehouse to access this resource.")
+
+        if not profile.warehouse.is_active:
+            raise PermissionDenied("Your assigned warehouse has been deactivated.")
 
         filter_kwargs = {f"{self.warehouse_field}_id": profile.warehouse_id}
         return qs.filter(**filter_kwargs)

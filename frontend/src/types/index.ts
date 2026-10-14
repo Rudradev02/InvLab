@@ -14,6 +14,8 @@ export interface User {
   is_active: boolean;
   must_change_password: boolean;
   role: Role;
+  warehouse?: WarehouseMinimal | null;
+  permissions?: string[];
   profile: UserProfile | null;
   last_login?: string;
 }

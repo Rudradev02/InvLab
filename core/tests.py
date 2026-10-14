@@ -21,9 +21,9 @@ class InvLabCoreApiTests(TestCase):
         self.client = APIClient()
 
         # Groups
-        self.admin_group = Group.objects.create(name=ROLE_ADMIN)
-        self.mgr_group = Group.objects.create(name=ROLE_MANAGER)
-        self.staff_group = Group.objects.create(name=ROLE_STAFF)
+        self.admin_group, _ = Group.objects.get_or_create(name=ROLE_ADMIN)
+        self.mgr_group, _ = Group.objects.get_or_create(name=ROLE_MANAGER)
+        self.staff_group, _ = Group.objects.get_or_create(name=ROLE_STAFF)
 
         # Warehouses
         self.wh_pune = Warehouse.objects.create(
@@ -203,3 +203,102 @@ class InvLabCoreApiTests(TestCase):
         # Verify stock remains unchanged at 6
         stock.refresh_from_db()
         self.assertEqual(stock.quantity, 6)
+
+    def test_all_api_endpoints_have_explicit_permissions(self):
+        """
+        Guard test: walks all API URL patterns and asserts every APIView/ViewSet
+        has explicit, non-empty permission_classes defined on the view class.
+        """
+        from django.urls import get_resolver
+        from rest_framework.views import APIView
+
+        resolver = get_resolver()
+        checked_views = set()
+
+        def inspect_patterns(patterns):
+            for pattern in patterns:
+                if hasattr(pattern, "url_patterns"):
+                    inspect_patterns(pattern.url_patterns)
+                elif hasattr(pattern, "callback"):
+                    callback = pattern.callback
+                    view_class = getattr(callback, "cls", None)
+                    if view_class and issubclass(view_class, APIView):
+                        if view_class not in checked_views:
+                            checked_views.add(view_class)
+                            self.assertTrue(
+                                hasattr(view_class, "permission_classes")
+                                and view_class.permission_classes is not None
+                                and len(view_class.permission_classes) > 0,
+                                f"View {view_class.__name__} has no explicit permission_classes configured.",
+                            )
+
+        inspect_patterns(resolver.url_patterns)
+        self.assertGreater(len(checked_views), 5, "Should have checked multiple API views.")
+
+    def test_last_admin_cannot_be_demoted_or_deactivated(self):
+        """
+        Edge case: the last active Admin cannot be demoted or deactivated.
+        """
+        # Ensure self.admin_user is the sole active admin
+        User.objects.filter(groups__name=ROLE_ADMIN).exclude(id=self.admin_user.id).delete()
+
+        self.client.force_login(self.admin_user)
+        # Attempt to demote to Staff
+        res = self.client.patch(
+            f"/api/v1/users/{self.admin_user.id}/",
+            {"role_name": ROLE_STAFF},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Attempt to deactivate
+        res = self.client.delete(f"/api/v1/users/{self.admin_user.id}/")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_user_cannot_change_own_role(self):
+        """
+        Edge case: nobody can change their own role.
+        """
+        # Create a second admin so last-admin check doesn't trigger first
+        admin2 = User.objects.create_user(username="admin2", password="Password@123", is_staff=True)
+        admin2.groups.add(self.admin_group)
+
+        self.client.force_login(self.admin_user)
+        res = self.client.patch(
+            f"/api/v1/users/{self.admin_user.id}/",
+            {"role_name": ROLE_MANAGER},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unassigned_non_admin_blocked_with_clear_message(self):
+        """
+        Edge case: a non-Admin without a warehouse is blocked with a clear message.
+        """
+        unassigned_staff = User.objects.create_user(
+            username="unassigned_user", password="Password@123"
+        )
+        unassigned_staff.groups.add(self.staff_group)
+        # Ensure no warehouse
+        unassigned_staff.profile.warehouse = None
+        unassigned_staff.profile.save()
+
+        self.client.force_login(unassigned_staff)
+        res = self.client.get("/api/v1/stock/")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("active warehouse", res.json()["error"]["message"])
+
+    def test_auth_me_returns_role_permissions_and_warehouse(self):
+        """
+        Verify /auth/me/ returns role, permissions, and warehouse.
+        """
+        self.client.force_login(self.mgr_pune)
+        res = self.client.get("/api/v1/auth/me/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        data = res.json()
+        self.assertEqual(data["role"], ROLE_MANAGER)
+        self.assertIn("warehouse", data)
+        self.assertEqual(data["warehouse"]["code"], "PUN")
+        self.assertIn("permissions", data)
+        self.assertIsInstance(data["permissions"], list)
+
