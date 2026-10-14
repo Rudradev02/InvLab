@@ -1,0 +1,36 @@
+# InvLab Feature Implementation Progress
+
+Spec: [`docs/InvLab Repo Review and Feature Prompts.md`](./InvLab%20Repo%20Review%20and%20Feature%20Prompts.md)
+
+Suggested Build Order: 22, 21, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24, 25, 26, 27, 28.
+
+| # | Prompt Title | Status | Commit Hash | Notes |
+|---|---|---|---|---|
+| 22 | GitHub Actions CI | todo | - | Two jobs (backend + frontend), PostgreSQL service, npm scripts |
+| 21 | Concurrency test for overselling | todo | - | TransactionTestCase with threads & barrier on PostgreSQL |
+| 1 | Warehouses, roles and scoping | todo | - | Multi-warehouse, roles, scoping mixin & permission classes |
+| 2 | Stock movement ledger | todo | - | Immutable StockMovement ledger & history |
+| 3 | Separate stock per warehouse | todo | - | StockLevel per warehouse + product |
+| 4 | Admin panel with a Warehouses overview | todo | - | Warehouses CRUD, Users CRUD, aggregation endpoints |
+| 5 | Warehouse Manager workspace | todo | - | Manager scoped views, staff management |
+| 6 | Staff workspace | todo | - | Staff sales and stock adjustments |
+| 7 | Stock transfers between warehouses | todo | - | StockTransfer dispatch, receive, variance |
+| 8 | Returns and refunds | todo | - | SaleReturn, line-level returnable tracking |
+| 9 | Customers and credit balance | todo | - | Customer model, udhaar, payments against sales |
+| 10 | Discounts and payment methods | todo | - | Amount/percent discount, payment methods |
+| 11 | Reports with exports | todo | - | Sales/stock reports, CSV, Excel, PDF |
+| 12 | Suppliers and purchase orders | todo | - | Purchase orders, supplier catalog, receiving |
+| 13 | Profit tracking | todo | - | Cost price snapshots, gross margin & profit metrics |
+| 14 | GST-ready invoices | todo | - | CGST, SGST, IGST tax invoice calculations & numbering |
+| 15 | Barcode and QR scanning | todo | - | Product barcode lookup, scanner UI |
+| 16 | Low-stock emails and daily summary | todo | - | Email notifications on reorder threshold |
+| 17 | Product images | todo | - | Product image upload & thumbnail (Ask first on storage) |
+| 18 | Batch and expiry tracking | todo | - | FEFO batch deduction & expiry alerts |
+| 19 | Dark mode | todo | - | Full dark token palette & theme switcher |
+| 20 | Global search (Ctrl+K) | todo | - | Command palette for navigation & entities |
+| 23 | Frontend tests and a Playwright flow | todo | - | Vitest component tests & Playwright E2E spec |
+| 24 | Docker and docker-compose | todo | - | Multi-stage Dockerfile & compose orchestration |
+| 25 | Rate limiting and security headers | todo | - | DRF throttles, CSP, security headers |
+| 26 | Live deployment | todo | - | Render / Railway config (Ask first) |
+| 27 | README, screenshots and GIF | todo | - | Polished README, screenshots & demo animation |
+| 28 | Retire the legacy templates | todo | - | Clean up old server-rendered templates/static |

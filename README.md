@@ -1,5 +1,7 @@
 # InvLab
 
+[![CI](https://github.com/Rudradev02/InvLab/actions/workflows/ci.yml/badge.svg)](https://github.com/Rudradev02/InvLab/actions/workflows/ci.yml)
+
 Multi-warehouse inventory and sales management for small and mid-size businesses. Each warehouse keeps its own stock, every stock change is recorded in a ledger, and access is split between three roles: Admin, Warehouse Manager and Staff.
 
 **Status:** planning. This repository starts with documentation; code is built milestone by milestone (see [ROADMAP.md](ROADMAP.md)).
