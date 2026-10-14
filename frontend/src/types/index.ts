@@ -40,20 +40,88 @@ export interface Warehouse extends WarehouseMinimal {
     username: string;
     first_name: string;
     last_name: string;
+    full_name?: string;
     email: string;
+    phone?: string;
   } | null;
   staff_count: number;
   created_at: string;
   updated_at: string;
 }
 
+export interface WarehouseStaffMember {
+  id: number;
+  username: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  role: Role;
+  is_active: boolean;
+}
+
 export interface WarehouseOverview extends Warehouse {
+  staff: WarehouseStaffMember[];
   products_stocked: number;
   total_units: number;
   low_stock_count: number;
   sales_today: string;
+  sales_today_count?: number;
   sales_30d: string;
+  sales_30d_count?: number;
   pending_transfers: number;
+  last_activity?: string | null;
+}
+
+export interface WarehouseFullDetail {
+  warehouse: Warehouse;
+  summary: {
+    total_units: number;
+    products_stocked: number;
+    low_stock_count: number;
+    sales_today_amount: string;
+    sales_today_count: number;
+    sales_30d_amount: string;
+    sales_30d_count: number;
+  };
+  staff: WarehouseStaffMember[];
+  stock: {
+    id: number;
+    product_id: number;
+    product_name: string;
+    sku: string;
+    barcode: string;
+    category: string;
+    quantity: number;
+    reorder_level: number;
+    unit: string;
+    price: string;
+    is_low_stock: boolean;
+  }[];
+  sales: {
+    id: number;
+    sale_number: string;
+    total_amount: string;
+    user: string;
+    user_name: string;
+    created_at: string;
+    items_count: number;
+    notes: string;
+  }[];
+  ledger: {
+    id: number;
+    product_id: number;
+    product_name: string;
+    product_sku: string;
+    delta: number;
+    movement_type: string;
+    reason: string;
+    reference: string;
+    balance_after: number | null;
+    user: string;
+    created_at: string;
+  }[];
 }
 
 export interface Category {

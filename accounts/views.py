@@ -3,6 +3,7 @@ from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -13,6 +14,7 @@ from core.permissions import (
     ROLE_ADMIN,
     ROLE_MANAGER,
     ROLE_STAFF,
+    IsAdmin,
     IsWarehouseManager,
     get_user_role,
 )
@@ -228,3 +230,35 @@ class UserViewSet(viewsets.ModelViewSet):
             entity_id=str(instance.id),
             warehouse=getattr(getattr(instance, "profile", None), "warehouse", None),
         )
+
+    @action(detail=True, methods=["post"], url_path="reset-password", permission_classes=[IsAdmin])
+    def reset_password(self, request, pk=None):
+        target_user = self.get_object()
+        new_password = request.data.get("new_password") or "InvLab@123"
+        target_user.set_password(new_password)
+        target_user.must_change_password = True
+        target_user.save(update_fields=["password", "must_change_password"])
+
+        AuditLog.objects.create(
+            user=request.user,
+            action="admin_reset_password",
+            entity_type="user",
+            entity_id=str(target_user.id),
+            warehouse=getattr(getattr(target_user, "profile", None), "warehouse", None),
+        )
+        return Response({"message": f"Password reset successfully for @{target_user.username}."})
+
+    @action(detail=True, methods=["post"], url_path="activate", permission_classes=[IsAdmin])
+    def activate(self, request, pk=None):
+        target_user = self.get_object()
+        target_user.is_active = True
+        target_user.save(update_fields=["is_active"])
+
+        AuditLog.objects.create(
+            user=request.user,
+            action="activate_user",
+            entity_type="user",
+            entity_id=str(target_user.id),
+            warehouse=getattr(getattr(target_user, "profile", None), "warehouse", None),
+        )
+        return Response({"message": f"User @{target_user.username} activated.", "is_active": True})
