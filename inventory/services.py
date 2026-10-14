@@ -73,6 +73,8 @@ def receive_stock(
             },
         )
 
+        update_cached_product_stock(product_id)
+
         return stock_level
 
 
@@ -129,4 +131,17 @@ def adjust_stock(
             },
         )
 
+        update_cached_product_stock(product_id)
+
         return stock_level
+
+
+def update_cached_product_stock(product_id: int):
+    """
+    Updates Product.stock cached total from the sum of its StockLevel quantities.
+    Product.stock is deprecated and maintained for backward compatibility.
+    """
+    from django.db.models import Sum
+
+    total = StockLevel.objects.filter(product_id=product_id).aggregate(t=Sum("quantity"))["t"] or 0
+    Product.objects.filter(pk=product_id).update(stock=total)

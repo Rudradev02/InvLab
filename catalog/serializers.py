@@ -28,6 +28,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "category_name",
             "description",
             "price",
+            "stock",
             "default_reorder_level",
             "is_active",
             "created_at",

@@ -213,3 +213,88 @@ class StockMovementLedgerTests(TestCase):
         res_history = self.client.get(f"/api/v1/ledger/product/{self.product.id}/")
         self.assertEqual(res_history.status_code, status.HTTP_200_OK)
         self.assertEqual(len(res_history.data["results"]), 2)
+
+    def test_sum_of_stocklevels_equals_cached_product_stock(self):
+        # WH1 receives 20, WH2 receives 30
+        receive_stock(self.wh1.id, self.product.id, 20, self.manager)
+        receive_stock(self.wh2.id, self.product.id, 30, self.admin)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 50)
+
+        # WH1 sells 5
+        create_sale(
+            warehouse_id=self.wh1.id,
+            lines_data=[{"product_id": self.product.id, "quantity": 5}],
+            user=self.staff,
+        )
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 45)
+
+        # WH2 adjusts down 10
+        adjust_stock(self.wh2.id, self.product.id, -10, self.admin, "WH2 write-off")
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 35)
+
+        # Sum of StockLevels must equal product.stock
+        sl_sum = sum(sl.quantity for sl in StockLevel.objects.filter(product=self.product))
+        self.assertEqual(sl_sum, self.product.stock)
+
+    def test_product_with_no_stocklevel_counts_as_zero_and_can_be_added(self):
+        # Create brand new product without any StockLevels
+        p_new = Product.objects.create(
+            name="Brand New Tablet",
+            sku="TAB-001",
+            category=self.category,
+            price=Decimal("12000.00"),
+        )
+        self.assertEqual(p_new.stock, 0)
+        self.assertEqual(StockLevel.objects.filter(product=p_new).count(), 0)
+
+        # Sale should fail gracefully indicating 0 available
+        with self.assertRaises(InsufficientStockError) as ctx:
+            create_sale(
+                warehouse_id=self.wh1.id,
+                lines_data=[{"product_id": p_new.id, "quantity": 1}],
+                user=self.staff,
+            )
+        self.assertIn("0", str(ctx.exception))
+
+        # Adding stock creates the StockLevel row dynamically
+        receive_stock(self.wh1.id, p_new.id, 8, self.manager, "Initial stock")
+        sl = StockLevel.objects.get(warehouse=self.wh1, product=p_new)
+        self.assertEqual(sl.quantity, 8)
+        p_new.refresh_from_db()
+        self.assertEqual(p_new.stock, 8)
+
+    def test_sales_in_different_warehouses_do_not_conflict(self):
+        # Stock both warehouses
+        receive_stock(self.wh1.id, self.product.id, 10, self.manager)
+        receive_stock(self.wh2.id, self.product.id, 10, self.admin)
+
+        # Sale in WH1
+        sale1 = create_sale(
+            warehouse_id=self.wh1.id,
+            lines_data=[{"product_id": self.product.id, "quantity": 4}],
+            user=self.staff,
+        )
+        self.assertEqual(sale1.warehouse, self.wh1)
+
+        # Sale in WH2
+        sale2 = create_sale(
+            warehouse_id=self.wh2.id,
+            lines_data=[{"product_id": self.product.id, "quantity": 6}],
+            user=self.admin,
+        )
+        self.assertEqual(sale2.warehouse, self.wh2)
+
+        sl1 = StockLevel.objects.get(warehouse=self.wh1, product=self.product)
+        sl2 = StockLevel.objects.get(warehouse=self.wh2, product=self.product)
+        self.assertEqual(sl1.quantity, 6)
+        self.assertEqual(sl2.quantity, 4)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 10)
+

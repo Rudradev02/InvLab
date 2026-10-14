@@ -8,6 +8,7 @@ from catalog.models import Product
 from core.exceptions import DomainError, InsufficientStockError
 from core.models import NumberSequence
 from inventory.models import StockLevel, StockMovement
+from inventory.services import update_cached_product_stock
 from warehouses.models import Warehouse
 
 from .models import Sale, SaleLine
@@ -112,6 +113,8 @@ def create_sale(
                 reference=sale_number,
                 balance_after=stock_level.quantity,
             )
+
+            update_cached_product_stock(product.id)
 
             # Server computes totals from product price at time of sale (BR-08)
             unit_price = product.price

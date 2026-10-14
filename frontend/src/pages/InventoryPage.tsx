@@ -66,9 +66,20 @@ export const InventoryPage: React.FC = () => {
     enabled: !!selectedStockLevel && detailTab === 'ledger',
   });
 
+  // Query product stock levels across all warehouses
+  const { data: productWarehouseStocksData } = useQuery({
+    queryKey: ['product-warehouse-stocks', selectedStockLevel?.product.id],
+    queryFn: () =>
+      apiRequest<PaginatedResponse<StockLevel>>(
+        `stock/?product=${selectedStockLevel?.product.id}`
+      ),
+    enabled: !!selectedStockLevel && detailTab === 'overview',
+  });
+
   const stocks = stockData?.results || [];
   const products = productsData?.results || [];
   const productMovements = productLedgerData?.results || [];
+  const warehouseStocks = productWarehouseStocksData?.results || [];
 
   // Filtered by local search
   const filteredStocks = stocks.filter(
@@ -513,6 +524,61 @@ export const InventoryPage: React.FC = () => {
                       <p className="text-[#202521]">{selectedStockLevel.product.description}</p>
                     </div>
                   )}
+
+                  {/* Stock Breakdown by Warehouse */}
+                  <div className="bg-white rounded-lg border border-[#E3E1DA] overflow-hidden">
+                    <div className="px-4 py-2.5 bg-[#F1F1EC] border-b border-[#E3E1DA] font-semibold text-xs text-[#202521] flex justify-between items-center">
+                      <span>Stock Across Warehouses</span>
+                      <span className="text-[11px] text-[#5E6B63] font-normal tabular-nums">
+                        Total:{' '}
+                        {warehouseStocks.reduce((acc, curr) => acc + curr.quantity, 0)} units
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-[#E3E1DA] text-[#5E6B63] bg-[#F8F8F5]">
+                            <th className="py-2 px-4 font-medium">Warehouse</th>
+                            <th className="py-2 px-4 text-right font-medium">Available Quantity</th>
+                            <th className="py-2 px-4 text-right font-medium">Reorder Level</th>
+                            <th className="py-2 px-4 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#E3E1DA]/50">
+                          {warehouseStocks.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="py-4 text-center text-[#5E6B63]">
+                                No warehouse stock records found.
+                              </td>
+                            </tr>
+                          ) : (
+                            warehouseStocks.map((ws) => (
+                              <tr key={ws.id} className="hover:bg-[#F8F8F5]">
+                                <td className="py-2.5 px-4 font-medium text-[#202521]">
+                                  {ws.warehouse_name}{' '}
+                                  <span className="text-[#5E6B63] font-mono text-[11px]">
+                                    ({ws.warehouse_code})
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-4 text-right font-bold tabular-nums text-[#202521]">
+                                  {ws.quantity}
+                                </td>
+                                <td className="py-2.5 px-4 text-right text-[#5E6B63] tabular-nums">
+                                  {ws.reorder_level}
+                                </td>
+                                <td className="py-2.5 px-4">
+                                  <StockIndicator
+                                    quantity={ws.quantity}
+                                    reorderLevel={ws.reorder_level}
+                                  />
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
 
                   <div className="pt-2 flex justify-end gap-2">
                     <Button
