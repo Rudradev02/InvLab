@@ -12,6 +12,10 @@ import { InventoryPage } from './pages/InventoryPage';
 import { SalesPage } from './pages/SalesPage';
 import { LedgerPage } from './pages/LedgerPage';
 import { UsersPage } from './pages/UsersPage';
+import { TransfersPage } from './pages/TransfersPage';
+import { CustomersPage } from './pages/CustomersPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { ForbiddenPage } from './pages/ForbiddenPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,12 +34,16 @@ export const App: React.FC = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/403" element={<ForbiddenPage />} />
 
             <Route path="/" element={<AppLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path="warehouses" element={<WarehousesPage />} />
               <Route path="inventory" element={<InventoryPage />} />
+              <Route path="transfers" element={<TransfersPage />} />
               <Route path="sales" element={<SalesPage />} />
+              <Route path="customers" element={<CustomersPage />} />
+              <Route path="reports" element={<ReportsPage />} />
               <Route path="ledger" element={<LedgerPage />} />
               <Route path="users" element={<UsersPage />} />
             </Route>

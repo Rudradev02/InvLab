@@ -57,10 +57,25 @@ export const TopBar: React.FC = () => {
       {/* Right: User Information & Logout */}
       <div className="flex items-center gap-4">
         <div className="text-right hidden sm:block">
-          <div className="text-sm font-semibold text-[#202521]">
-            {user?.first_name ? `${user.first_name} ${user.last_name}` : user?.username}
+          <div className="flex items-center justify-end gap-2">
+            <span className="text-sm font-semibold text-[#202521]">
+              {user?.first_name ? `${user.first_name} ${user.last_name}` : user?.username}
+            </span>
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                user?.role === 'Admin'
+                  ? 'bg-[#173D32] text-white'
+                  : user?.role === 'Warehouse Manager'
+                  ? 'bg-[#4B6358] text-white'
+                  : 'bg-[#F1F1EC] text-[#5E6B63] border border-[#E3E1DA]'
+              }`}
+            >
+              {user?.role}
+            </span>
           </div>
-          <div className="text-xs text-[#5E6B63] font-medium">{user?.role}</div>
+          <div className="text-xs text-[#5E6B63] font-medium">
+            {user?.profile?.warehouse?.name || (user?.role === 'Admin' ? 'Global Admin' : 'Unassigned')}
+          </div>
         </div>
 
         <div className="w-8 h-8 rounded-full bg-[#173D32] text-white flex items-center justify-center font-bold text-xs uppercase shadow-xs">

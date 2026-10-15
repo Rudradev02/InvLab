@@ -26,7 +26,9 @@ class StockTransferLineSerializer(serializers.ModelSerializer):
 class StockTransferSerializer(serializers.ModelSerializer):
     lines = StockTransferLineSerializer(many=True, read_only=True)
     from_warehouse_name = serializers.CharField(source="from_warehouse.name", read_only=True)
+    from_warehouse_code = serializers.CharField(source="from_warehouse.code", read_only=True)
     to_warehouse_name = serializers.CharField(source="to_warehouse.name", read_only=True)
+    to_warehouse_code = serializers.CharField(source="to_warehouse.code", read_only=True)
     dispatched_by_username = serializers.CharField(source="dispatched_by.username", read_only=True)
     received_by_username = serializers.CharField(source="received_by.username", read_only=True)
 
@@ -37,8 +39,10 @@ class StockTransferSerializer(serializers.ModelSerializer):
             "transfer_number",
             "from_warehouse",
             "from_warehouse_name",
+            "from_warehouse_code",
             "to_warehouse",
             "to_warehouse_name",
+            "to_warehouse_code",
             "status",
             "notes",
             "dispatched_by",
@@ -62,6 +66,7 @@ class CreateTransferLineSerializer(serializers.Serializer):
 class CreateTransferRequestSerializer(serializers.Serializer):
     from_warehouse_id = serializers.IntegerField(required=False, allow_null=True)
     to_warehouse_id = serializers.IntegerField()
+    is_draft = serializers.BooleanField(required=False, default=False)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
     lines = CreateTransferLineSerializer(many=True, allow_empty=False)
 

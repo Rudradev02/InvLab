@@ -20,7 +20,7 @@ SECRET_KEY = os.getenv(
 )
 DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
 
-allowed_hosts_str = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
+allowed_hosts_str = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
 ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_str.split(",") if h.strip()]
 
 csrf_trusted_str = os.getenv(
@@ -47,7 +47,9 @@ INSTALLED_APPS = [
     "catalog.apps.CatalogConfig",
     "inventory.apps.InventoryConfig",
     "sales.apps.SalesConfig",
+    "customers.apps.CustomersConfig",
     "transfers.apps.TransfersConfig",
+    "reports.apps.ReportsConfig",
     "audit.apps.AuditConfig",
     "api.apps.ApiConfig",
 ]
@@ -85,7 +87,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 # Database
-database_url = os.getenv("DATABASE_URL", "").strip()
+if os.getenv("USE_SQLITE") == "1":
+    database_url = ""
+else:
+    database_url = os.getenv("DATABASE_URL", "").strip()
+
 if database_url:
     DATABASES = {"default": dj_database_url.parse(database_url, conn_max_age=600)}
 else:

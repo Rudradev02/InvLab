@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from catalog.models import Product
 from catalog.serializers import ProductSerializer
 
 from .models import StockLevel, StockMovement
@@ -7,6 +8,15 @@ from .models import StockLevel, StockMovement
 
 class StockLevelSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.filter(is_active=True),
+        source="product",
+        write_only=True,
+        required=False,
+    )
+    initial_quantity = serializers.IntegerField(
+        write_only=True, required=False, default=0, min_value=0
+    )
     warehouse_name = serializers.CharField(source="warehouse.name", read_only=True)
     warehouse_code = serializers.CharField(source="warehouse.code", read_only=True)
     status = serializers.SerializerMethodField()
@@ -19,6 +29,8 @@ class StockLevelSerializer(serializers.ModelSerializer):
             "warehouse_name",
             "warehouse_code",
             "product",
+            "product_id",
+            "initial_quantity",
             "quantity",
             "reorder_level",
             "status",
@@ -26,6 +38,10 @@ class StockLevelSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "quantity", "created_at", "updated_at"]
+        extra_kwargs = {
+            "warehouse": {"required": False},
+        }
+        validators = []
 
     def get_status(self, obj) -> str:
         if obj.quantity <= 0:
@@ -58,6 +74,8 @@ class StockMovementSerializer(serializers.ModelSerializer):
             "user",
             "username",
             "reference",
+            "reason",
+            "balance_after",
             "created_at",
         ]
         read_only_fields = fields
@@ -73,7 +91,7 @@ class ReceiveStockSerializer(serializers.Serializer):
 class AdjustStockSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     delta = serializers.IntegerField()
-    reason = serializers.CharField(required=False, allow_blank=True, default="")
+    reason = serializers.CharField(required=True, allow_blank=False, min_length=2)
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_delta(self, value):

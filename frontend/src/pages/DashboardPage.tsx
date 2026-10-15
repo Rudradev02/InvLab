@@ -2,15 +2,39 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '../lib/api';
-import { StockLevel, Sale, StockMovement, PaginatedResponse } from '../types';
+import { StockLevel, Sale, StockMovement, PaginatedResponse, WarehouseFullDetail, StockTransfer } from '../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { StockIndicator } from '../components/ui/stock-indicator';
+import { Badge } from '../components/ui/badge';
 import { formatCurrency, formatNumber, formatDate } from '../lib/format';
-import { Package, AlertTriangle, TrendingUp, Boxes, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import {
+  Package,
+  AlertTriangle,
+  TrendingUp,
+  Boxes,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Building2,
+  MapPin,
+  Phone,
+  Mail,
+  Users as UsersIcon,
+  Truck,
+  ArrowRight,
+  IndianRupee,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const DashboardPage: React.FC = () => {
   const { user, selectedWarehouseId } = useAuth();
+  const isManager = user?.role === 'Warehouse Manager';
+
+  // Query manager warehouse full details if Warehouse Manager
+  const { data: myWarehouseData } = useQuery({
+    queryKey: ['my-warehouse-detail'],
+    queryFn: () => apiRequest<WarehouseFullDetail>('warehouses/my-warehouse/'),
+    enabled: isManager,
+  });
 
   // Query stock levels
   const { data: stockData, isLoading: stockLoading } = useQuery({
@@ -40,14 +64,35 @@ export const DashboardPage: React.FC = () => {
     enabled: user?.role !== 'Staff', // Staff cannot view ledger
   });
 
+  // Query incoming transfers in transit
+  const { data: incomingTransfersData } = useQuery({
+    queryKey: ['incoming-transfers-count', selectedWarehouseId],
+    queryFn: () => {
+      const q = selectedWarehouseId ? `&warehouse=${selectedWarehouseId}` : '';
+      return apiRequest<PaginatedResponse<StockTransfer>>(`transfers/?direction=incoming&status=in_transit${q}`);
+    },
+    enabled: user?.role === 'Warehouse Manager' || (user?.role === 'Admin' && !!selectedWarehouseId),
+  });
+
+  // Query outstanding receivables
+  const { data: receivablesData } = useQuery({
+    queryKey: ['receivables-total', selectedWarehouseId],
+    queryFn: () => {
+      const q = selectedWarehouseId ? `?warehouse=${selectedWarehouseId}` : '';
+      return apiRequest<{ total_receivables: string }>(`customers/receivables/${q}`);
+    },
+    enabled: user?.role === 'Admin' || user?.role === 'Warehouse Manager',
+  });
+
   const stocks = stockData?.results || [];
   const sales = salesData?.results || [];
   const movements = ledgerData?.results || [];
+  const incomingTransfersCount = incomingTransfersData?.count ?? incomingTransfersData?.results?.length ?? 0;
 
   // KPIs
   const totalUnits = stocks.reduce((acc, curr) => acc + curr.quantity, 0);
   const lowStockItems = stocks.filter((s) => s.quantity <= s.reorder_level);
-  const totalSalesAmount = sales.reduce((acc, curr) => acc + parseFloat(curr.total_amount || '0'), 0);
+  const totalSalesAmount = sales.reduce((acc, curr) => acc + parseFloat(curr.net_total || curr.total_amount || '0'), 0);
 
   return (
     <div className="space-y-6">
@@ -64,6 +109,14 @@ export const DashboardPage: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {isManager && (
+            <Link
+              to="/users"
+              className="inline-flex items-center gap-2 h-9 px-3 rounded-md bg-white border border-[#E3E1DA] text-[#202521] text-xs font-semibold hover:bg-[#F8F8F5] transition-colors"
+            >
+              <UsersIcon className="w-3.5 h-3.5 text-[#173D32]" /> My Staff
+            </Link>
+          )}
           <Link
             to="/sales"
             className="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-[#173D32] text-white text-sm font-medium hover:bg-[#122e26] transition-colors shadow-xs"
@@ -73,8 +126,83 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Read-only Warehouse Contact Card for Warehouse Manager */}
+      {isManager && myWarehouseData && (
+        <Card className="bg-[#F8F8F5] border-[#E3E1DA]">
+          <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-[#173D32]" />
+                <span className="font-bold text-sm text-[#202521]">{myWarehouseData.warehouse.name}</span>
+                <span className="font-mono text-xs font-bold text-[#173D32] bg-[#E6F2EA] px-2 py-0.5 rounded">
+                  {myWarehouseData.warehouse.code}
+                </span>
+                <Badge variant={myWarehouseData.warehouse.is_active ? 'success' : 'error'}>
+                  {myWarehouseData.warehouse.is_active ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#5E6B63] pt-1">
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-[#5E6B63]" />
+                  {myWarehouseData.warehouse.address_line1}, {myWarehouseData.warehouse.city}, {myWarehouseData.warehouse.state} — {myWarehouseData.warehouse.pincode}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-[#5E6B63]" />
+                  {myWarehouseData.warehouse.phone}
+                </span>
+                {myWarehouseData.warehouse.email && (
+                  <span className="flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5 text-[#5E6B63]" />
+                    {myWarehouseData.warehouse.email}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-[#E3E1DA]/80">
+              <div className="text-right text-xs">
+                <div className="text-[11px] text-[#5E6B63]">Active Facility Staff</div>
+                <div className="font-bold text-[#173D32]">{myWarehouseData.staff.length} team members</div>
+              </div>
+              <div className="text-right text-xs pl-3 border-l border-[#E3E1DA]">
+                <div className="text-[11px] text-[#5E6B63]">Sales Today</div>
+                <div className="font-bold text-[#2F7D4F] tabular-nums">
+                  ₹{parseFloat(myWarehouseData.summary.sales_today_amount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Incoming Transfers In Transit Notification */}
+      {incomingTransfersCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+              <Truck className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-amber-900">
+                {incomingTransfersCount} Incoming Stock Consignment{incomingTransfersCount > 1 ? 's' : ''} In Transit
+              </h4>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Consignments dispatched to your warehouse require receipt verification and reconciliation into local stock.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/transfers"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-amber-800 text-white text-xs font-semibold hover:bg-amber-900 transition-colors shrink-0 shadow-xs"
+          >
+            Review & Receive <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
+
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Card className="border-l-4 border-l-[#173D32]">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
@@ -122,6 +250,25 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="w-11 h-11 rounded-lg bg-[#FBE9E7] flex items-center justify-center text-[#C77B55]">
               <TrendingUp className="w-5 h-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-[#B3261E]">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#5E6B63]">
+                Receivables (Udhaar)
+              </p>
+              <h3 className="text-2xl font-bold text-[#B3261E] mt-1 tabular-nums">
+                {formatCurrency(receivablesData?.total_receivables || '0.00')}
+              </h3>
+              <Link to="/customers" className="text-xs text-[#B3261E] hover:underline mt-0.5 block">
+                Manage credit &rarr;
+              </Link>
+            </div>
+            <div className="w-11 h-11 rounded-lg bg-[#FBE9E7] flex items-center justify-center text-[#B3261E]">
+              <IndianRupee className="w-5 h-5" />
             </div>
           </CardContent>
         </Card>

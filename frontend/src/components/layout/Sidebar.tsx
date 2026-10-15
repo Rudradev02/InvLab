@@ -9,6 +9,8 @@ import {
   Users,
   ShieldCheck,
   Boxes,
+  ArrowLeftRight,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { clsx } from 'clsx';
@@ -25,22 +27,40 @@ export const Sidebar: React.FC = () => {
       roles: ['Admin', 'Warehouse Manager', 'Staff'],
     },
     {
-      to: '/warehouses',
-      label: 'Warehouses',
-      icon: WarehouseIcon,
+      to: '/inventory',
+      label: 'Stock & Inventory',
+      icon: Package,
       roles: ['Admin', 'Warehouse Manager', 'Staff'],
     },
     {
-      to: '/inventory',
-      label: 'Inventory',
-      icon: Package,
-      roles: ['Admin', 'Warehouse Manager', 'Staff'],
+      to: '/transfers',
+      label: 'Transfers',
+      icon: ArrowLeftRight,
+      roles: ['Admin', 'Warehouse Manager'],
     },
     {
       to: '/sales',
       label: 'Sales & Billing',
       icon: ShoppingCart,
       roles: ['Admin', 'Warehouse Manager', 'Staff'],
+    },
+    {
+      to: '/customers',
+      label: 'Customers & Udhaar',
+      icon: Users,
+      roles: ['Admin', 'Warehouse Manager', 'Staff'],
+    },
+    {
+      to: '/reports',
+      label: 'Reports & Analytics',
+      icon: BarChart3,
+      roles: ['Admin', 'Warehouse Manager'], // Staff cannot view reports per Prompt 6 & 11
+    },
+    {
+      to: '/warehouses',
+      label: 'Warehouses',
+      icon: WarehouseIcon,
+      roles: ['Admin', 'Warehouse Manager'],
     },
     {
       to: '/ledger',

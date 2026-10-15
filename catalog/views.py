@@ -34,6 +34,12 @@ class CategoryViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only Admin and Warehouse Managers can update categories.")
         return super().update(request, *args, **kwargs)
 
+    def partial_update(self, request, *args, **kwargs):
+        role = get_user_role(request.user)
+        if role not in (ROLE_ADMIN, ROLE_MANAGER):
+            raise PermissionDenied("Only Admin and Warehouse Managers can update categories.")
+        return super().partial_update(request, *args, **kwargs)
+
     def destroy(self, request, *args, **kwargs):
         if get_user_role(request.user) != ROLE_ADMIN:
             raise PermissionDenied("Only Admin can delete categories.")
@@ -74,6 +80,12 @@ class ProductViewSet(viewsets.ModelViewSet):
         if role not in (ROLE_ADMIN, ROLE_MANAGER):
             raise PermissionDenied("Only Admin and Warehouse Managers can update products.")
         return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        role = get_user_role(request.user)
+        if role not in (ROLE_ADMIN, ROLE_MANAGER):
+            raise PermissionDenied("Only Admin and Warehouse Managers can update products.")
+        return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         if get_user_role(request.user) != ROLE_ADMIN:

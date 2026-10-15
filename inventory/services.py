@@ -44,6 +44,10 @@ def receive_stock(
         raise DomainError("Received quantity must be greater than zero.", code="invalid_quantity")
 
     with transaction.atomic():
+        warehouse = Warehouse.objects.get(pk=warehouse_id)
+        if not warehouse.is_active:
+            raise DomainError("Cannot receive stock in a deactivated warehouse.", code="warehouse_inactive")
+
         stock_level = get_or_create_locked_stock_level(warehouse_id, product_id)
         stock_level.quantity += quantity
         stock_level.save(update_fields=["quantity", "updated_at"])
@@ -55,7 +59,9 @@ def receive_stock(
             delta=quantity,
             movement_type="receive",
             user=user,
+            reason=reference or "Stock received",
             reference=reference or "Stock received",
+            balance_after=stock_level.quantity,
         )
 
         AuditLog.objects.create(
@@ -71,11 +77,13 @@ def receive_stock(
             },
         )
 
+        update_cached_product_stock(product_id)
+
         return stock_level
 
 
 def adjust_stock(
-    warehouse_id: int, product_id: int, delta: int, user, reason: str = ""
+    warehouse_id: int, product_id: int, delta: int, user, reason: str = "Stock adjustment"
 ) -> StockLevel:
     """
     Adjust existing stock (positive or negative).
@@ -83,8 +91,13 @@ def adjust_stock(
     """
     if delta == 0:
         raise DomainError("Stock adjustment delta cannot be zero.", code="invalid_delta")
+    clean_reason = (reason or "").strip() or "Stock adjustment"
 
     with transaction.atomic():
+        warehouse = Warehouse.objects.get(pk=warehouse_id)
+        if not warehouse.is_active:
+            raise DomainError("Cannot adjust stock in a deactivated warehouse.", code="warehouse_inactive")
+
         stock_level = get_or_create_locked_stock_level(warehouse_id, product_id)
         new_quantity = stock_level.quantity + delta
 
@@ -108,7 +121,9 @@ def adjust_stock(
             delta=delta,
             movement_type="adjustment",
             user=user,
-            reference=reason or "Stock adjustment",
+            reason=clean_reason,
+            reference=clean_reason,
+            balance_after=stock_level.quantity,
         )
 
         AuditLog.objects.create(
@@ -121,8 +136,21 @@ def adjust_stock(
                 "product_id": product_id,
                 "delta": delta,
                 "new_quantity": stock_level.quantity,
-                "reason": reason,
+                "reason": clean_reason,
             },
         )
 
+        update_cached_product_stock(product_id)
+
         return stock_level
+
+
+def update_cached_product_stock(product_id: int):
+    """
+    Updates Product.stock cached total from the sum of its StockLevel quantities.
+    Product.stock is deprecated and maintained for backward compatibility.
+    """
+    from django.db.models import Sum
+
+    total = StockLevel.objects.filter(product_id=product_id).aggregate(t=Sum("quantity"))["t"] or 0
+    Product.objects.filter(pk=product_id).update(stock=total)

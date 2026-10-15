@@ -17,6 +17,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
+    is_active = serializers.BooleanField(default=True)
 
     class Meta:
         model = Product
@@ -28,6 +29,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "category_name",
             "description",
             "price",
+            "stock",
             "default_reorder_level",
             "is_active",
             "created_at",

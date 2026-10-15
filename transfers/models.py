@@ -7,6 +7,7 @@ from core.models import TimestampedModel
 class StockTransfer(TimestampedModel):
     STATUS_CHOICES = (
         ("draft", "Draft"),
+        ("in_transit", "In Transit"),
         ("dispatched", "Dispatched"),
         ("received", "Received"),
         ("cancelled", "Cancelled"),

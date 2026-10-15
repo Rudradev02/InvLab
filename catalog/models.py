@@ -22,6 +22,10 @@ class Product(TimestampedModel):
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name="products")
     description = models.TextField(blank=True, default="")
     price = models.DecimalField(max_digits=12, decimal_places=2)
+    stock = models.IntegerField(
+        default=0,
+        help_text="DEPRECATED: Cached sum of warehouse stock levels. Use StockLevel for active inventory.",
+    )
     default_reorder_level = models.PositiveIntegerField(default=5)
     is_active = models.BooleanField(default=True)
 

@@ -16,7 +16,12 @@ from .serializers import (
     ReceiveTransferRequestSerializer,
     StockTransferSerializer,
 )
-from .services import dispatch_transfer, receive_transfer
+from .services import (
+    cancel_transfer,
+    create_transfer,
+    dispatch_existing_transfer,
+    receive_transfer,
+)
 
 
 class StockTransferViewSet(viewsets.ModelViewSet):
@@ -33,18 +38,52 @@ class StockTransferViewSet(viewsets.ModelViewSet):
             .prefetch_related("lines__product")
         )
 
+        query_params = getattr(self.request, "query_params", getattr(self.request, "GET", {}))
+        direction = query_params.get("direction")
+        status_filter = query_params.get("status")
+        search = query_params.get("search")
+
         if role == ROLE_ADMIN:
-            warehouse_id = self.request.query_params.get("warehouse")
+            warehouse_id = query_params.get("warehouse")
             if warehouse_id:
-                qs = qs.filter(Q(from_warehouse_id=warehouse_id) | Q(to_warehouse_id=warehouse_id))
-            return qs
+                if direction == "incoming":
+                    qs = qs.filter(to_warehouse_id=warehouse_id)
+                elif direction == "outgoing":
+                    qs = qs.filter(from_warehouse_id=warehouse_id)
+                else:
+                    qs = qs.filter(Q(from_warehouse_id=warehouse_id) | Q(to_warehouse_id=warehouse_id))
+            else:
+                if direction == "incoming":
+                    pass  # Admin view all incoming doesn't make sense without warehouse
+                elif direction == "outgoing":
+                    pass
+        else:
+            profile = getattr(user, "profile", None)
+            if not profile or not profile.warehouse_id:
+                return StockTransfer.objects.none()
 
-        profile = getattr(user, "profile", None)
-        if not profile or not profile.warehouse_id:
-            return StockTransfer.objects.none()
+            wh_id = profile.warehouse_id
+            if direction == "incoming":
+                qs = qs.filter(to_warehouse_id=wh_id)
+            elif direction == "outgoing":
+                qs = qs.filter(from_warehouse_id=wh_id)
+            else:
+                qs = qs.filter(Q(from_warehouse_id=wh_id) | Q(to_warehouse_id=wh_id))
 
-        wh_id = profile.warehouse_id
-        return qs.filter(Q(from_warehouse_id=wh_id) | Q(to_warehouse_id=wh_id))
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        if search:
+            qs = qs.filter(
+                Q(transfer_number__icontains=search)
+                | Q(notes__icontains=search)
+                | Q(from_warehouse__name__icontains=search)
+                | Q(to_warehouse__name__icontains=search)
+                | Q(lines__product__name__icontains=search)
+                | Q(lines__product__sku__icontains=search)
+            ).distinct()
+
+        return qs
 
     def create(self, request, *args, **kwargs):
         serializer = CreateTransferRequestSerializer(data=request.data)
@@ -63,17 +102,31 @@ class StockTransferViewSet(viewsets.ModelViewSet):
             if not from_wh_id:
                 raise PermissionDenied("Admin must specify from_warehouse_id.")
 
-        transfer = dispatch_transfer(
+        transfer = create_transfer(
             from_warehouse_id=from_wh_id,
             to_warehouse_id=data["to_warehouse_id"],
             lines_data=data["lines"],
             user=user,
             notes=data.get("notes", ""),
+            is_draft=data.get("is_draft", False),
         )
 
         return Response(StockTransferSerializer(transfer).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], permission_classes=[IsWarehouseManager])
+    @action(detail=True, methods=["post"], url_path="dispatch")
+    def dispatch_transfer(self, request, pk=None):
+        transfer = self.get_object()
+        user = request.user
+        role = get_user_role(user)
+
+        if role != ROLE_ADMIN:
+            if transfer.from_warehouse_id != user.profile.warehouse_id:
+                raise PermissionDenied("You can only dispatch transfers originating from your warehouse.")
+
+        transfer = dispatch_existing_transfer(transfer.id, user=user)
+        return Response(StockTransferSerializer(transfer).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
     def receive(self, request, pk=None):
         transfer = self.get_object()
         user = request.user
@@ -97,4 +150,18 @@ class StockTransferViewSet(viewsets.ModelViewSet):
             user=user,
         )
 
+        return Response(StockTransferSerializer(transfer).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        transfer = self.get_object()
+        user = request.user
+        role = get_user_role(user)
+
+        if role != ROLE_ADMIN:
+            wh_id = user.profile.warehouse_id
+            if transfer.from_warehouse_id != wh_id and transfer.to_warehouse_id != wh_id:
+                raise PermissionDenied("You can only cancel transfers associated with your warehouse.")
+
+        transfer = cancel_transfer(transfer.id, user=user)
         return Response(StockTransferSerializer(transfer).data, status=status.HTTP_200_OK)
