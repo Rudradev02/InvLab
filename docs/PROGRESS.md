@@ -13,7 +13,7 @@ Suggested Build Order: 22, 21, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 | 3 | Separate stock per warehouse | done | `ef041f8` | StockLevel per warehouse + product, cached Product.stock sync, warehouse breakdown UI |
 | 4 | Admin panel with a Warehouses overview | done | `aae2706` | Warehouses & Users CRUD, overview analytics, stock chart, 5-tab detail modal |
 | 5 | Warehouse Manager workspace | done | `6e8bce6` | Manager scoped views, stock CRUD, staff management, warehouse contact card |
-| 6 | Staff workspace | todo | - | Staff sales and stock adjustments |
+| 6 | Staff workspace | done | `eca485a` | Scoped sales and stock views, receive/adjust dialogs, required reason, idempotency |
 | 7 | Stock transfers between warehouses | todo | - | StockTransfer dispatch, receive, variance |
 | 8 | Returns and refunds | todo | - | SaleReturn, line-level returnable tracking |
 | 9 | Customers and credit balance | todo | - | Customer model, udhaar, payments against sales |
