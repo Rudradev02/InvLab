@@ -9,6 +9,7 @@ import {
   Users,
   ShieldCheck,
   Boxes,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { clsx } from 'clsx';
@@ -29,6 +30,12 @@ export const Sidebar: React.FC = () => {
       label: 'Stock & Inventory',
       icon: Package,
       roles: ['Admin', 'Warehouse Manager', 'Staff'],
+    },
+    {
+      to: '/transfers',
+      label: 'Transfers',
+      icon: ArrowLeftRight,
+      roles: ['Admin', 'Warehouse Manager'],
     },
     {
       to: '/sales',

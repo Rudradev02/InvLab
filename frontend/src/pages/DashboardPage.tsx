@@ -2,7 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '../lib/api';
-import { StockLevel, Sale, StockMovement, PaginatedResponse, WarehouseFullDetail } from '../types';
+import { StockLevel, Sale, StockMovement, PaginatedResponse, WarehouseFullDetail, StockTransfer } from '../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { StockIndicator } from '../components/ui/stock-indicator';
 import { Badge } from '../components/ui/badge';
@@ -19,6 +19,8 @@ import {
   Phone,
   Mail,
   Users as UsersIcon,
+  Truck,
+  ArrowRight,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -61,9 +63,20 @@ export const DashboardPage: React.FC = () => {
     enabled: user?.role !== 'Staff', // Staff cannot view ledger
   });
 
+  // Query incoming transfers in transit
+  const { data: incomingTransfersData } = useQuery({
+    queryKey: ['incoming-transfers-count', selectedWarehouseId],
+    queryFn: () => {
+      const q = selectedWarehouseId ? `&warehouse=${selectedWarehouseId}` : '';
+      return apiRequest<PaginatedResponse<StockTransfer>>(`transfers/?direction=incoming&status=in_transit${q}`);
+    },
+    enabled: user?.role === 'Warehouse Manager' || (user?.role === 'Admin' && !!selectedWarehouseId),
+  });
+
   const stocks = stockData?.results || [];
   const sales = salesData?.results || [];
   const movements = ledgerData?.results || [];
+  const incomingTransfersCount = incomingTransfersData?.count ?? incomingTransfersData?.results?.length ?? 0;
 
   // KPIs
   const totalUnits = stocks.reduce((acc, curr) => acc + curr.quantity, 0);
@@ -150,6 +163,31 @@ export const DashboardPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Incoming Transfers In Transit Notification */}
+      {incomingTransfersCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+              <Truck className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-amber-900">
+                {incomingTransfersCount} Incoming Stock Consignment{incomingTransfersCount > 1 ? 's' : ''} In Transit
+              </h4>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Consignments dispatched to your warehouse require receipt verification and reconciliation into local stock.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/transfers"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-amber-800 text-white text-xs font-semibold hover:bg-amber-900 transition-colors shrink-0 shadow-xs"
+          >
+            Review & Receive <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       )}
 
       {/* KPI Cards */}

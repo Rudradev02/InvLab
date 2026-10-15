@@ -227,3 +227,38 @@ export interface ApiError {
   fields?: Record<string, string[]>;
   details?: Record<string, unknown>;
 }
+
+export type TransferStatus = 'draft' | 'in_transit' | 'dispatched' | 'received' | 'cancelled';
+
+export interface StockTransferLine {
+  id: number;
+  product?: Product;
+  product_sku: string;
+  product_name: string;
+  dispatched_quantity: number;
+  received_quantity: number;
+  variance: number;
+}
+
+export interface StockTransfer {
+  id: number;
+  transfer_number: string;
+  from_warehouse: number;
+  from_warehouse_name: string;
+  from_warehouse_code: string;
+  to_warehouse: number;
+  to_warehouse_name: string;
+  to_warehouse_code: string;
+  status: TransferStatus;
+  notes: string;
+  dispatched_by: number | null;
+  dispatched_by_username: string | null;
+  dispatched_at: string | null;
+  received_by: number | null;
+  received_by_username: string | null;
+  received_at: string | null;
+  lines: StockTransferLine[];
+  created_at: string;
+  updated_at: string;
+}
+
