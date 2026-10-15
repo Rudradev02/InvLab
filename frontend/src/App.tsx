@@ -14,6 +14,7 @@ import { LedgerPage } from './pages/LedgerPage';
 import { UsersPage } from './pages/UsersPage';
 import { TransfersPage } from './pages/TransfersPage';
 import { CustomersPage } from './pages/CustomersPage';
+import { ReportsPage } from './pages/ReportsPage';
 import { ForbiddenPage } from './pages/ForbiddenPage';
 
 const queryClient = new QueryClient({
@@ -42,6 +43,7 @@ export const App: React.FC = () => {
               <Route path="transfers" element={<TransfersPage />} />
               <Route path="sales" element={<SalesPage />} />
               <Route path="customers" element={<CustomersPage />} />
+              <Route path="reports" element={<ReportsPage />} />
               <Route path="ledger" element={<LedgerPage />} />
               <Route path="users" element={<UsersPage />} />
             </Route>

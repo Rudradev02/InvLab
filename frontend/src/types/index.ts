@@ -352,3 +352,31 @@ export interface Payment {
   created_at: string;
 }
 
+export interface ReportColumn {
+  key: string;
+  label: string;
+  align: 'left' | 'center' | 'right';
+  is_currency: boolean;
+}
+
+export interface ReportMeta {
+  id: string;
+  name: string;
+  description: string;
+  supports_date_filter: boolean;
+  supports_category_filter: boolean;
+  supports_warehouse_filter: boolean;
+  supported_formats: string[];
+}
+
+export interface ReportData {
+  report_id: string;
+  name: string;
+  description: string;
+  filters_applied: Record<string, any>;
+  summary: Record<string, any>;
+  payment_methods_breakdown?: Record<string, { count: number; amount: number }>;
+  columns: ReportColumn[];
+  rows: Record<string, any>[];
+}
+

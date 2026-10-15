@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Boxes,
   ArrowLeftRight,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { clsx } from 'clsx';
@@ -48,6 +49,12 @@ export const Sidebar: React.FC = () => {
       label: 'Customers & Udhaar',
       icon: Users,
       roles: ['Admin', 'Warehouse Manager', 'Staff'],
+    },
+    {
+      to: '/reports',
+      label: 'Reports & Analytics',
+      icon: BarChart3,
+      roles: ['Admin', 'Warehouse Manager'], // Staff cannot view reports per Prompt 6 & 11
     },
     {
       to: '/warehouses',

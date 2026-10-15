@@ -38,6 +38,8 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="auth-logout"),
     path("auth/me/", MeView.as_view(), name="auth-me"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
+    # Reports endpoints
+    path("reports/", include("reports.urls")),
     # Router endpoints under /api/v1/
     path("", include(router.urls)),
 ]
