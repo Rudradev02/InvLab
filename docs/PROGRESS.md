@@ -17,7 +17,7 @@ Suggested Build Order: 22, 21, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 | 7 | Stock transfers between warehouses | done | `18c8f80` | StockTransfer draft/dispatch/receive, variance shortfall, in-transit cancellation, deadlock-free locking, TransfersPage UI |
 | 8 | Returns and refunds | done | `1054769` | SaleReturn & SaleReturnLine, immutable sales, line returnable tracking, ledger stock restore, printable return voucher |
 | 9 | Customers and credit balance | done | `f9ca344` | Customer & Payment models, udhaar credit balances, FIFO oldest-sales allocation, CustomersPage UI, SalesPage customer selector & udhaar preview, Dashboard receivables KPI |
-| 10 | Discounts and payment methods | todo | - | Amount/percent discount, payment methods |
+| 10 | Discounts and payment methods | done | `5544902` | Subtotal, flat/percent discount, staff 10% limit check, payment methods (Cash, UPI, Card, Credit/Udhaar), receipt breakdown & filters |
 | 11 | Reports with exports | todo | - | Sales/stock reports, CSV, Excel, PDF |
 | 12 | Suppliers and purchase orders | todo | - | Purchase orders, supplier catalog, receiving |
 | 13 | Profit tracking | todo | - | Cost price snapshots, gross margin & profit metrics |
