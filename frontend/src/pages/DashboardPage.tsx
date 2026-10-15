@@ -21,6 +21,7 @@ import {
   Users as UsersIcon,
   Truck,
   ArrowRight,
+  IndianRupee,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -71,6 +72,16 @@ export const DashboardPage: React.FC = () => {
       return apiRequest<PaginatedResponse<StockTransfer>>(`transfers/?direction=incoming&status=in_transit${q}`);
     },
     enabled: user?.role === 'Warehouse Manager' || (user?.role === 'Admin' && !!selectedWarehouseId),
+  });
+
+  // Query outstanding receivables
+  const { data: receivablesData } = useQuery({
+    queryKey: ['receivables-total', selectedWarehouseId],
+    queryFn: () => {
+      const q = selectedWarehouseId ? `?warehouse=${selectedWarehouseId}` : '';
+      return apiRequest<{ total_receivables: string }>(`customers/receivables/${q}`);
+    },
+    enabled: user?.role === 'Admin' || user?.role === 'Warehouse Manager',
   });
 
   const stocks = stockData?.results || [];
@@ -191,7 +202,7 @@ export const DashboardPage: React.FC = () => {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <Card className="border-l-4 border-l-[#173D32]">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
@@ -239,6 +250,25 @@ export const DashboardPage: React.FC = () => {
             </div>
             <div className="w-11 h-11 rounded-lg bg-[#FBE9E7] flex items-center justify-center text-[#C77B55]">
               <TrendingUp className="w-5 h-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-[#B3261E]">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#5E6B63]">
+                Receivables (Udhaar)
+              </p>
+              <h3 className="text-2xl font-bold text-[#B3261E] mt-1 tabular-nums">
+                {formatCurrency(receivablesData?.total_receivables || '0.00')}
+              </h3>
+              <Link to="/customers" className="text-xs text-[#B3261E] hover:underline mt-0.5 block">
+                Manage credit &rarr;
+              </Link>
+            </div>
+            <div className="w-11 h-11 rounded-lg bg-[#FBE9E7] flex items-center justify-center text-[#B3261E]">
+              <IndianRupee className="w-5 h-5" />
             </div>
           </CardContent>
         </Card>

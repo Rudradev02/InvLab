@@ -16,7 +16,16 @@ class Sale(TimestampedModel):
         on_delete=models.PROTECT,
         related_name="sales_recorded",
     )
+    customer = models.ForeignKey(
+        "customers.Customer",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="sales",
+    )
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     notes = models.TextField(blank=True, default="")
     idempotency_key = models.CharField(max_length=64, blank=True, null=True, db_index=True)
 

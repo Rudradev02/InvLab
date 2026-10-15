@@ -240,7 +240,12 @@ export interface Sale {
   warehouse_code: string;
   user: number;
   cashier_name: string;
+  customer?: number | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
   total_amount: string;
+  amount_paid: string;
+  balance_due: string;
   total_refunded?: string;
   net_total?: string;
   return_status?: ReturnStatus;
@@ -297,5 +302,45 @@ export interface StockTransfer {
   lines: StockTransferLine[];
   created_at: string;
   updated_at: string;
+}
+
+export interface Customer {
+  id: number;
+  name: string;
+  phone: string;
+  email?: string;
+  gstin?: string;
+  address?: string;
+  is_active: boolean;
+  total_balance_due: string;
+  lifetime_value: string;
+  sales_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerSummary {
+  lifetime_value: string;
+  total_balance_due: string;
+  total_payments: string;
+  sales_count: number;
+}
+
+export interface Payment {
+  id: number;
+  payment_number: string;
+  customer: number;
+  customer_name: string;
+  customer_phone: string;
+  sale: number | null;
+  sale_number?: string | null;
+  warehouse: number;
+  warehouse_name: string;
+  warehouse_code: string;
+  cashier_name: string;
+  amount: string;
+  payment_method: string;
+  notes: string;
+  created_at: string;
 }
 

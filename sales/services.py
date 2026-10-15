@@ -10,6 +10,7 @@ from core.exceptions import DomainError, InsufficientStockError
 from core.models import NumberSequence
 from inventory.models import StockLevel, StockMovement
 from inventory.services import get_or_create_locked_stock_level, update_cached_product_stock
+from customers.models import Customer
 from warehouses.models import Warehouse
 
 from .models import Sale, SaleLine, SaleReturn, SaleReturnLine
@@ -21,6 +22,8 @@ def create_sale(
     user,
     notes: str = "",
     idempotency_key: str = "",
+    customer_id: int | None = None,
+    amount_paid: Decimal | float | int | str | None = None,
 ) -> Sale:
     """
     Creates a sale atomically with row-locking, stock checks, and ledger recording.
@@ -143,8 +146,37 @@ def create_sale(
                 subtotal=subtotal,
             )
 
+        customer = None
+        if customer_id:
+            customer = Customer.objects.filter(pk=customer_id).first()
+            if not customer or not customer.is_active:
+                raise DomainError(
+                    "Customer is inactive or does not exist.", code="customer_inactive"
+                )
+
+        if amount_paid is None:
+            final_paid = total_amount
+            balance_due = Decimal("0.00")
+        else:
+            final_paid = Decimal(str(amount_paid))
+            if final_paid < Decimal("0.00"):
+                raise DomainError("Amount paid cannot be negative.", code="invalid_amount")
+            if final_paid < total_amount:
+                if not customer:
+                    raise DomainError(
+                        "A credit sale (unpaid balance) requires an active registered customer.",
+                        code="customer_required_for_credit",
+                    )
+                balance_due = total_amount - final_paid
+            else:
+                final_paid = total_amount
+                balance_due = Decimal("0.00")
+
+        sale.customer = customer
         sale.total_amount = total_amount
-        sale.save(update_fields=["total_amount"])
+        sale.amount_paid = final_paid
+        sale.balance_due = balance_due
+        sale.save(update_fields=["customer", "total_amount", "amount_paid", "balance_due"])
 
         AuditLog.objects.create(
             user=user,

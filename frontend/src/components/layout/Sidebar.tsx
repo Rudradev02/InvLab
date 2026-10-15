@@ -44,6 +44,12 @@ export const Sidebar: React.FC = () => {
       roles: ['Admin', 'Warehouse Manager', 'Staff'],
     },
     {
+      to: '/customers',
+      label: 'Customers & Udhaar',
+      icon: Users,
+      roles: ['Admin', 'Warehouse Manager', 'Staff'],
+    },
+    {
       to: '/warehouses',
       label: 'Warehouses',
       icon: WarehouseIcon,

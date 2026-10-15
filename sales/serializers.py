@@ -90,6 +90,8 @@ class SaleSerializer(serializers.ModelSerializer):
     warehouse_name = serializers.CharField(source="warehouse.name", read_only=True)
     warehouse_code = serializers.CharField(source="warehouse.code", read_only=True)
     cashier_name = serializers.CharField(source="user.username", read_only=True)
+    customer_name = serializers.CharField(source="customer.name", read_only=True)
+    customer_phone = serializers.CharField(source="customer.phone", read_only=True)
     total_refunded = serializers.SerializerMethodField()
     net_total = serializers.SerializerMethodField()
     return_status = serializers.SerializerMethodField()
@@ -104,7 +106,12 @@ class SaleSerializer(serializers.ModelSerializer):
             "warehouse_code",
             "user",
             "cashier_name",
+            "customer",
+            "customer_name",
+            "customer_phone",
             "total_amount",
+            "amount_paid",
+            "balance_due",
             "total_refunded",
             "net_total",
             "return_status",
@@ -143,6 +150,8 @@ class CreateSaleLineSerializer(serializers.Serializer):
 
 class CreateSaleRequestSerializer(serializers.Serializer):
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    customer_id = serializers.IntegerField(required=False, allow_null=True)
+    amount_paid = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
     lines = CreateSaleLineSerializer(many=True, allow_empty=False)
 

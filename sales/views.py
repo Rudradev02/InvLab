@@ -118,6 +118,8 @@ class SaleViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
             user=user,
             notes=data.get("notes", ""),
             idempotency_key=idempotency_key,
+            customer_id=data.get("customer_id"),
+            amount_paid=data.get("amount_paid"),
         )
 
         return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)

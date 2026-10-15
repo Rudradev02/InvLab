@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../lib/api';
-import { Sale, StockLevel, PaginatedResponse, SaleReturn } from '../types';
+import { Sale, StockLevel, PaginatedResponse, SaleReturn, Customer } from '../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -17,6 +17,8 @@ import {
   RotateCcw,
   Eye,
   Receipt,
+  UserPlus,
+  AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,6 +41,18 @@ export const SalesPage: React.FC = () => {
   const [addQuantity, setAddQuantity] = useState<number>(1);
   const [notes, setNotes] = useState<string>('');
 
+  // Customer & Payment state
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [amountPaidInput, setAmountPaidInput] = useState<string>('');
+  const [isQuickAddCustomerOpen, setIsQuickAddCustomerOpen] = useState(false);
+  const [quickCustomerForm, setQuickCustomerForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    gstin: '',
+    address: '',
+  });
+
   // Modals state
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [viewingSale, setViewingSale] = useState<Sale | null>(null);
@@ -49,6 +63,13 @@ export const SalesPage: React.FC = () => {
   const [returnQuantities, setReturnQuantities] = useState<Record<number, number>>({});
   const [returnReason, setReturnReason] = useState<string>('');
   const [refundMethod, setRefundMethod] = useState<string>('cash');
+
+  // Query customers (active only)
+  const { data: customersData } = useQuery({
+    queryKey: ['customers-list-active'],
+    queryFn: () => apiRequest<PaginatedResponse<Customer>>('customers/?page_size=100&is_active=true'),
+  });
+  const activeCustomers = customersData?.results || [];
 
   // Query stock in active warehouse
   const { data: stockData } = useQuery({
@@ -120,10 +141,45 @@ export const SalesPage: React.FC = () => {
   };
 
   const cartTotal = cart.reduce((acc, line) => acc + line.unitPrice * line.quantity, 0);
+  const effectiveAmountPaid =
+    amountPaidInput === '' ? cartTotal : parseFloat(amountPaidInput) || 0;
+  const balanceDue = Math.max(0, cartTotal - effectiveAmountPaid);
+  const isCreditSale = balanceDue > 0.005;
+  const isCustomerMissing = isCreditSale && !selectedCustomerId;
+
+  // Quick Add Customer Mutation
+  const quickAddCustomerMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<Customer>('customers/', {
+        method: 'POST',
+        body: JSON.stringify(quickCustomerForm),
+      }),
+    onSuccess: (newCust) => {
+      toast.success(`Customer ${newCust.name} added!`);
+      queryClient.invalidateQueries({ queryKey: ['customers-list-active'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      setSelectedCustomerId(newCust.id.toString());
+      setIsQuickAddCustomerOpen(false);
+      setQuickCustomerForm({ name: '', phone: '', email: '', gstin: '', address: '' });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to create customer.');
+    },
+  });
 
   // Create Sale Mutation
   const createSaleMutation = useMutation({
     mutationFn: () => {
+      if (isCustomerMissing) {
+        throw new Error('Credit sales (udhaar) require selecting a registered customer.');
+      }
+      if (effectiveAmountPaid < 0) {
+        throw new Error('Amount paid cannot be negative.');
+      }
+      if (effectiveAmountPaid > cartTotal) {
+        throw new Error('Amount paid cannot exceed the sale total.');
+      }
+
       const idempotencyKey = crypto.randomUUID();
       return apiRequest<Sale>('sales/', {
         method: 'POST',
@@ -132,6 +188,8 @@ export const SalesPage: React.FC = () => {
         },
         body: JSON.stringify({
           warehouse_id: selectedWarehouseId,
+          customer_id: selectedCustomerId ? parseInt(selectedCustomerId, 10) : null,
+          amount_paid: effectiveAmountPaid.toFixed(2),
           notes,
           lines: cart.map((line) => ({
             product_id: line.productId,
@@ -144,10 +202,15 @@ export const SalesPage: React.FC = () => {
       toast.success(`Sale ${data.sale_number} recorded successfully!`);
       setCart([]);
       setNotes('');
+      setAmountPaidInput('');
+      setSelectedCustomerId('');
       setCompletedSale(data);
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sales-stock'] });
       queryClient.invalidateQueries({ queryKey: ['stock'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['customers-receivables'] });
+      queryClient.invalidateQueries({ queryKey: ['customers-list-active'] });
     },
     onError: (err: any) => {
       toast.error(err.message || 'Failed to record sale.');
@@ -368,6 +431,39 @@ export const SalesPage: React.FC = () => {
               <CardTitle className="text-base">Sale Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Customer Selector */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-[#202521] uppercase">
+                    Customer
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickAddCustomerOpen(true)}
+                    className="text-xs text-[#173D32] hover:underline font-semibold flex items-center gap-1"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    + New Customer
+                  </button>
+                </div>
+                <select
+                  value={selectedCustomerId}
+                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-[#E3E1DA] bg-white text-xs text-[#202521] focus:outline-none focus:ring-1 focus:ring-[#173D32]"
+                >
+                  <option value="">Walk-in Customer (No Udhaar)</option>
+                  {activeCustomers.map((c) => {
+                    const bal = parseFloat(c.total_balance_due || '0');
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.phone}){bal > 0 ? ` [Udhaar: ₹${c.total_balance_due}]` : ''}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Ticket Breakdown */}
               <div className="bg-[#F8F8F5] p-4 rounded-lg space-y-2 border border-[#E3E1DA]">
                 <div className="flex justify-between text-xs text-[#5E6B63]">
                   <span>Items in Ticket</span>
@@ -380,17 +476,66 @@ export const SalesPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="border-t border-[#E3E1DA] pt-2 flex justify-between items-baseline">
-                  <span className="text-sm font-bold text-[#202521]">Total Due:</span>
+                  <span className="text-sm font-bold text-[#202521]">Total Amount:</span>
                   <span className="text-xl font-extrabold text-[#173D32] tabular-nums">
                     {formatCurrency(cartTotal)}
                   </span>
                 </div>
               </div>
 
+              {/* Amount Paid Input & Balance Due Preview */}
+              <div className="space-y-1.5 p-3 rounded-lg border border-[#E3E1DA] bg-white">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-[#202521] uppercase">
+                    Amount Paid (₹)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setAmountPaidInput(cartTotal.toFixed(2))}
+                    className="text-[11px] text-[#2F7D4F] hover:underline font-medium"
+                  >
+                    Pay Full (₹{cartTotal.toFixed(2)})
+                  </button>
+                </div>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={cartTotal}
+                  placeholder={cartTotal > 0 ? cartTotal.toFixed(2) : '0.00'}
+                  value={amountPaidInput}
+                  onChange={(e) => setAmountPaidInput(e.target.value)}
+                  className="font-bold text-sm h-10"
+                />
+
+                {/* Balance Due (Udhaar) Preview */}
+                <div className="pt-2 border-t border-[#E3E1DA] flex justify-between items-center text-xs">
+                  <span className="font-medium text-[#5E6B63]">Balance Due (Udhaar):</span>
+                  <span
+                    className={`font-bold tabular-nums text-sm ${
+                      isCreditSale ? 'text-[#B3261E]' : 'text-[#2F7D4F]'
+                    }`}
+                  >
+                    {formatCurrency(balanceDue)}
+                  </span>
+                </div>
+
+                {isCreditSale && (
+                  <div className="mt-2 p-2 rounded bg-[#FBE9E7] text-[11px] text-[#B3261E] flex items-start gap-1.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      {selectedCustomerId
+                        ? `Credit Sale: ₹${balanceDue.toFixed(2)} will be debited to customer's account.`
+                        : 'Credit sales require selecting a registered customer. Walk-in customers cannot have udhaar.'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-[#202521]">Order Notes / Reference</label>
                 <Input
-                  placeholder="Optional customer name, PO #..."
+                  placeholder="Optional notes, PO #..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                 />
@@ -399,11 +544,11 @@ export const SalesPage: React.FC = () => {
               <Button
                 type="button"
                 className="w-full h-11 text-sm font-semibold"
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || isCustomerMissing}
                 isLoading={createSaleMutation.isPending}
                 onClick={() => createSaleMutation.mutate()}
               >
-                Confirm Sale &amp; Deduct Stock
+                {isCreditSale ? 'Confirm Credit Sale & Deduct Stock' : 'Confirm Sale & Deduct Stock'}
               </Button>
             </CardContent>
           </Card>
@@ -428,6 +573,7 @@ export const SalesPage: React.FC = () => {
               <thead>
                 <tr className="bg-[#F1F1EC] text-[#5E6B63] border-b border-[#E3E1DA]">
                   <th className="py-2.5 px-4 font-semibold">Sale Number</th>
+                  <th className="py-2.5 px-4 font-semibold">Customer</th>
                   <th className="py-2.5 px-4 font-semibold">Warehouse</th>
                   <th className="py-2.5 px-4 font-semibold">Cashier</th>
                   <th className="py-2.5 px-4 font-semibold">Lines</th>
@@ -440,6 +586,7 @@ export const SalesPage: React.FC = () => {
               <tbody className="divide-y divide-[#E3E1DA]/60">
                 {salesList.map((sale) => {
                   const hasRefund = parseFloat(sale.total_refunded || '0') > 0;
+                  const bal = parseFloat(sale.balance_due || '0');
                   const canReturn = isManagerOrAdmin && sale.return_status !== 'fully_returned';
 
                   return (
@@ -451,6 +598,14 @@ export const SalesPage: React.FC = () => {
                         >
                           {sale.sale_number}
                         </button>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-[#202521]">
+                          {sale.customer_name || 'Walk-in Customer'}
+                        </div>
+                        {sale.customer_phone && (
+                          <div className="text-[11px] text-[#5E6B63]">{sale.customer_phone}</div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-[#5E6B63] font-medium">{sale.warehouse_code}</td>
                       <td className="py-3 px-4 text-[#202521] font-medium">{sale.cashier_name}</td>
@@ -474,6 +629,15 @@ export const SalesPage: React.FC = () => {
                             {formatCurrency(sale.total_amount)}
                           </div>
                         )}
+                        {bal > 0 ? (
+                          <div className="text-[10px] font-bold text-[#B3261E] bg-[#FBE9E7] px-1.5 py-0.5 rounded inline-block mt-0.5">
+                            Udhaar: {formatCurrency(sale.balance_due)}
+                          </div>
+                        ) : sale.customer ? (
+                          <div className="text-[10px] text-[#2F7D4F] font-medium">
+                            Paid in full
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -533,6 +697,10 @@ export const SalesPage: React.FC = () => {
                   <p className="text-xs text-[#5E6B63] mt-0.5">
                     {viewingSale.warehouse_name} • Cashier: {viewingSale.cashier_name} • {formatDate(viewingSale.created_at)}
                   </p>
+                  <p className="text-xs font-semibold text-[#173D32] mt-0.5">
+                    Customer: {viewingSale.customer_name || 'Walk-in Customer'}
+                    {viewingSale.customer_phone ? ` (${viewingSale.customer_phone})` : ''}
+                  </p>
                 </div>
               </div>
             </DialogHeader>
@@ -591,6 +759,16 @@ export const SalesPage: React.FC = () => {
                     {formatCurrency(viewingSale.net_total || viewingSale.total_amount)}
                   </span>
                 </div>
+                <div className="flex justify-between text-xs pt-1 border-t border-[#E3E1DA]/60">
+                  <span className="text-[#5E6B63]">Amount Paid:</span>
+                  <span className="font-semibold text-[#2F7D4F]">{formatCurrency(viewingSale.amount_paid)}</span>
+                </div>
+                {parseFloat(viewingSale.balance_due || '0') > 0 && (
+                  <div className="flex justify-between text-xs text-[#B3261E]">
+                    <span className="font-bold">Outstanding Udhaar:</span>
+                    <span className="font-bold">{formatCurrency(viewingSale.balance_due)}</span>
+                  </div>
+                )}
               </div>
 
               {/* Return Vouchers History */}
@@ -894,6 +1072,10 @@ export const SalesPage: React.FC = () => {
                 <div className="text-[11px] text-[#5E6B63]">
                   Cashier: {completedSale.cashier_name}
                 </div>
+                <div className="text-[11px] font-semibold text-[#173D32] mt-0.5">
+                  Customer: {completedSale.customer_name || 'Walk-in Customer'}
+                  {completedSale.customer_phone ? ` (${completedSale.customer_phone})` : ''}
+                </div>
               </div>
 
               {/* Items List */}
@@ -913,12 +1095,28 @@ export const SalesPage: React.FC = () => {
                 ))}
               </div>
 
-              {/* Total */}
-              <div className="flex justify-between items-center text-sm font-bold pt-1">
-                <span>Total Amount:</span>
-                <span className="text-[#173D32] text-base tabular-nums">
-                  {formatCurrency(completedSale.total_amount)}
-                </span>
+              {/* Totals Breakdown */}
+              <div className="space-y-1 text-xs border-b border-[#E3E1DA] pb-3">
+                <div className="flex justify-between items-center text-sm font-bold">
+                  <span>Total Amount:</span>
+                  <span className="text-[#173D32] text-base tabular-nums">
+                    {formatCurrency(completedSale.total_amount)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs text-[#2F7D4F]">
+                  <span>Amount Paid:</span>
+                  <span className="font-bold tabular-nums">
+                    {formatCurrency(completedSale.amount_paid)}
+                  </span>
+                </div>
+                {parseFloat(completedSale.balance_due || '0') > 0 && (
+                  <div className="flex justify-between items-center text-xs text-[#B3261E]">
+                    <span className="font-bold">Outstanding Udhaar:</span>
+                    <span className="font-bold tabular-nums">
+                      {formatCurrency(completedSale.balance_due)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 flex gap-2">
@@ -937,6 +1135,96 @@ export const SalesPage: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Quick Add Customer Dialog */}
+      <Dialog open={isQuickAddCustomerOpen} onOpenChange={setIsQuickAddCustomerOpen}>
+        <DialogContent className="max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#173D32]">
+              <UserPlus className="w-5 h-5" />
+              <span>Quick Add Customer</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!quickCustomerForm.name.trim()) {
+                toast.error('Customer name is required.');
+                return;
+              }
+              if (!quickCustomerForm.phone.trim()) {
+                toast.error('Phone number is required.');
+                return;
+              }
+              quickAddCustomerMutation.mutate();
+            }}
+            className="space-y-3.5 pt-2 text-xs"
+          >
+            <div>
+              <label className="block font-semibold text-[#202521] uppercase mb-1">
+                Customer Name *
+              </label>
+              <Input
+                placeholder="e.g. Rahul Sharma"
+                value={quickCustomerForm.name}
+                onChange={(e) =>
+                  setQuickCustomerForm({ ...quickCustomerForm, name: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-[#202521] uppercase mb-1">
+                Phone Number *
+              </label>
+              <Input
+                placeholder="e.g. 9876543210"
+                value={quickCustomerForm.phone}
+                onChange={(e) =>
+                  setQuickCustomerForm({ ...quickCustomerForm, phone: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold text-[#202521] uppercase mb-1">
+                GSTIN (Optional)
+              </label>
+              <Input
+                placeholder="e.g. 29AAAAA0000A1Z5"
+                value={quickCustomerForm.gstin}
+                onChange={(e) =>
+                  setQuickCustomerForm({
+                    ...quickCustomerForm,
+                    gstin: e.target.value.toUpperCase(),
+                  })
+                }
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#E3E1DA]">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsQuickAddCustomerOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={quickAddCustomerMutation.isPending}
+                className="bg-[#173D32] text-white hover:bg-[#122e26]"
+              >
+                {quickAddCustomerMutation.isPending ? 'Creating...' : 'Save & Select'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
+
