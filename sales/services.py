@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import models, transaction
 from django.db.models import Sum
@@ -8,12 +8,25 @@ from audit.models import AuditLog
 from catalog.models import Product
 from core.exceptions import DomainError, InsufficientStockError
 from core.models import NumberSequence
+from core.permissions import get_user_role, ROLE_ADMIN, ROLE_WAREHOUSE_MANAGER, ROLE_STAFF
 from inventory.models import StockLevel, StockMovement
 from inventory.services import get_or_create_locked_stock_level, update_cached_product_stock
 from customers.models import Customer
 from warehouses.models import Warehouse
 
-from .models import Sale, SaleLine, SaleReturn, SaleReturnLine
+from .models import (
+    Sale,
+    SaleLine,
+    SaleReturn,
+    SaleReturnLine,
+    DISCOUNT_TYPE_NONE,
+    DISCOUNT_TYPE_AMOUNT,
+    DISCOUNT_TYPE_PERCENT,
+    DISCOUNT_TYPE_CHOICES,
+    PAYMENT_METHOD_CASH,
+    PAYMENT_METHOD_CREDIT,
+    PAYMENT_METHOD_CHOICES,
+)
 
 
 def create_sale(
@@ -24,6 +37,9 @@ def create_sale(
     idempotency_key: str = "",
     customer_id: int | None = None,
     amount_paid: Decimal | float | int | str | None = None,
+    discount_type: str = DISCOUNT_TYPE_NONE,
+    discount_value: Decimal | float | int | str = 0,
+    payment_method: str = PAYMENT_METHOD_CASH,
 ) -> Sale:
     """
     Creates a sale atomically with row-locking, stock checks, and ledger recording.
@@ -81,7 +97,7 @@ def create_sale(
             idempotency_key=idempotency_key or None,
         )
 
-        total_amount = Decimal("0.00")
+        subtotal_amount = Decimal("0.00")
 
         for line in sorted_lines:
             product_id = line["product_id"]
@@ -135,16 +151,66 @@ def create_sale(
 
             # Server computes totals from product price at time of sale (BR-08)
             unit_price = product.price
-            subtotal = unit_price * Decimal(qty)
-            total_amount += subtotal
+            line_subtotal = unit_price * Decimal(qty)
+            subtotal_amount += line_subtotal
 
             SaleLine.objects.create(
                 sale=sale,
                 product=product,
                 quantity=qty,
                 unit_price=unit_price,
-                subtotal=subtotal,
+                subtotal=line_subtotal,
             )
+
+        # Discount Validation & Calculation
+        discount_type = str(discount_type or DISCOUNT_TYPE_NONE).lower()
+        if discount_type not in [c[0] for c in DISCOUNT_TYPE_CHOICES]:
+            raise DomainError(f"Invalid discount type: {discount_type}.", code="invalid_discount_type")
+
+        discount_val = Decimal(str(discount_value or 0))
+        if discount_val < Decimal("0.00"):
+            raise DomainError("Discount value cannot be negative.", code="invalid_discount")
+
+        role = get_user_role(user)
+
+        if discount_type == DISCOUNT_TYPE_PERCENT:
+            if discount_val > Decimal("100.00"):
+                raise DomainError("Discount percentage cannot exceed 100%.", code="discount_exceeds_100")
+            if role == ROLE_STAFF and discount_val > Decimal("10.00"):
+                raise DomainError(
+                    "Staff can only apply discounts up to 10%. Higher discounts require Manager or Admin approval.",
+                    code="discount_limit_exceeded",
+                )
+            discount_amount = (subtotal_amount * (discount_val / Decimal("100.00"))).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        elif discount_type == DISCOUNT_TYPE_AMOUNT:
+            if discount_val > subtotal_amount:
+                raise DomainError(
+                    f"Discount amount (₹{discount_val}) cannot exceed subtotal (₹{subtotal_amount}).",
+                    code="discount_exceeds_subtotal",
+                )
+            max_staff_discount = (subtotal_amount * Decimal("0.10")).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            if role == ROLE_STAFF and discount_val > max_staff_discount:
+                raise DomainError(
+                    f"Staff can only apply discounts up to 10% of subtotal (₹{max_staff_discount}). Higher discounts require Manager or Admin approval.",
+                    code="discount_limit_exceeded",
+                )
+            discount_amount = discount_val.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        else:
+            discount_type = DISCOUNT_TYPE_NONE
+            discount_val = Decimal("0.00")
+            discount_amount = Decimal("0.00")
+
+        total_amount = max(Decimal("0.00"), subtotal_amount - discount_amount)
+
+        # Payment Method & Customer Validation
+        payment_method = str(payment_method or PAYMENT_METHOD_CASH).lower()
+        valid_methods = [c[0] for c in PAYMENT_METHOD_CHOICES]
+        if payment_method not in valid_methods:
+            raise DomainError(f"Invalid payment method: {payment_method}.", code="invalid_payment_method")
 
         customer = None
         if customer_id:
@@ -154,13 +220,26 @@ def create_sale(
                     "Customer is inactive or does not exist.", code="customer_inactive"
                 )
 
+        if payment_method == PAYMENT_METHOD_CREDIT:
+            if not customer:
+                raise DomainError(
+                    "Credit sales require an active registered customer.",
+                    code="customer_required_for_credit",
+                )
+
         if amount_paid is None:
-            final_paid = total_amount
-            balance_due = Decimal("0.00")
+            if payment_method == PAYMENT_METHOD_CREDIT:
+                final_paid = Decimal("0.00")
+                balance_due = total_amount
+            else:
+                final_paid = total_amount
+                balance_due = Decimal("0.00")
         else:
             final_paid = Decimal(str(amount_paid))
             if final_paid < Decimal("0.00"):
                 raise DomainError("Amount paid cannot be negative.", code="invalid_amount")
+            if final_paid > total_amount:
+                final_paid = total_amount
             if final_paid < total_amount:
                 if not customer:
                     raise DomainError(
@@ -169,14 +248,30 @@ def create_sale(
                     )
                 balance_due = total_amount - final_paid
             else:
-                final_paid = total_amount
                 balance_due = Decimal("0.00")
 
         sale.customer = customer
+        sale.subtotal = subtotal_amount
+        sale.discount_type = discount_type
+        sale.discount_value = discount_val
+        sale.discount_amount = discount_amount
         sale.total_amount = total_amount
         sale.amount_paid = final_paid
         sale.balance_due = balance_due
-        sale.save(update_fields=["customer", "total_amount", "amount_paid", "balance_due"])
+        sale.payment_method = payment_method
+        sale.save(
+            update_fields=[
+                "customer",
+                "subtotal",
+                "discount_type",
+                "discount_value",
+                "discount_amount",
+                "total_amount",
+                "amount_paid",
+                "balance_due",
+                "payment_method",
+            ]
+        )
 
         AuditLog.objects.create(
             user=user,

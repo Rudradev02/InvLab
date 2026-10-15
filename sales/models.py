@@ -4,6 +4,31 @@ from django.db import models
 from core.models import TimestampedModel
 
 
+DISCOUNT_TYPE_NONE = "none"
+DISCOUNT_TYPE_AMOUNT = "amount"
+DISCOUNT_TYPE_PERCENT = "percent"
+
+DISCOUNT_TYPE_CHOICES = [
+    (DISCOUNT_TYPE_NONE, "None"),
+    (DISCOUNT_TYPE_AMOUNT, "Amount"),
+    (DISCOUNT_TYPE_PERCENT, "Percent"),
+]
+
+PAYMENT_METHOD_CASH = "cash"
+PAYMENT_METHOD_UPI = "upi"
+PAYMENT_METHOD_CARD = "card"
+PAYMENT_METHOD_CREDIT = "credit"
+PAYMENT_METHOD_UNKNOWN = "unknown"
+
+PAYMENT_METHOD_CHOICES = [
+    (PAYMENT_METHOD_CASH, "Cash"),
+    (PAYMENT_METHOD_UPI, "UPI"),
+    (PAYMENT_METHOD_CARD, "Card"),
+    (PAYMENT_METHOD_CREDIT, "Credit"),
+    (PAYMENT_METHOD_UNKNOWN, "Unknown"),
+]
+
+
 class Sale(TimestampedModel):
     sale_number = models.CharField(max_length=40, unique=True, db_index=True)
     warehouse = models.ForeignKey(
@@ -23,9 +48,18 @@ class Sale(TimestampedModel):
         blank=True,
         related_name="sales",
     )
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_type = models.CharField(
+        max_length=10, choices=DISCOUNT_TYPE_CHOICES, default=DISCOUNT_TYPE_NONE
+    )
+    discount_value = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_method = models.CharField(
+        max_length=20, choices=PAYMENT_METHOD_CHOICES, default=PAYMENT_METHOD_CASH
+    )
     notes = models.TextField(blank=True, default="")
     idempotency_key = models.CharField(max_length=64, blank=True, null=True, db_index=True)
 

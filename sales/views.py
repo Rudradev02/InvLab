@@ -61,6 +61,10 @@ class SaleViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
             else:
                 return Sale.objects.none()
 
+        payment_method = self.request.query_params.get("payment_method")
+        if payment_method:
+            qs = qs.filter(payment_method=payment_method)
+
         search = self.request.query_params.get("search")
         if search:
             qs = qs.filter(
@@ -120,6 +124,9 @@ class SaleViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
             idempotency_key=idempotency_key,
             customer_id=data.get("customer_id"),
             amount_paid=data.get("amount_paid"),
+            discount_type=data.get("discount_type", "none"),
+            discount_value=data.get("discount_value", 0),
+            payment_method=data.get("payment_method", "cash"),
         )
 
         return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)

@@ -2,6 +2,7 @@ from rest_framework.permissions import BasePermission
 
 ROLE_ADMIN = "Admin"
 ROLE_MANAGER = "Warehouse Manager"
+ROLE_WAREHOUSE_MANAGER = ROLE_MANAGER
 ROLE_STAFF = "Staff"
 
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../lib/api';
-import { Sale, StockLevel, PaginatedResponse, SaleReturn, Customer } from '../types';
+import { Sale, StockLevel, PaginatedResponse, SaleReturn, Customer, DiscountType, PaymentMethod } from '../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -19,6 +19,11 @@ import {
   Receipt,
   UserPlus,
   AlertCircle,
+  Tag,
+  Percent,
+  CreditCard,
+  Banknote,
+  QrCode,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -41,9 +46,13 @@ export const SalesPage: React.FC = () => {
   const [addQuantity, setAddQuantity] = useState<number>(1);
   const [notes, setNotes] = useState<string>('');
 
-  // Customer & Payment state
+  // Customer, Discount & Payment state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [discountType, setDiscountType] = useState<DiscountType>('none');
+  const [discountValueInput, setDiscountValueInput] = useState<string>('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [amountPaidInput, setAmountPaidInput] = useState<string>('');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('');
   const [isQuickAddCustomerOpen, setIsQuickAddCustomerOpen] = useState(false);
   const [quickCustomerForm, setQuickCustomerForm] = useState({
     name: '',
@@ -82,9 +91,12 @@ export const SalesPage: React.FC = () => {
 
   // Query recent sales
   const { data: salesData, isLoading: salesLoading } = useQuery({
-    queryKey: ['sales', selectedWarehouseId],
+    queryKey: ['sales', selectedWarehouseId, paymentMethodFilter],
     queryFn: () => {
-      const q = selectedWarehouseId ? `?warehouse=${selectedWarehouseId}` : '';
+      const params = new URLSearchParams();
+      if (selectedWarehouseId) params.append('warehouse', selectedWarehouseId.toString());
+      if (paymentMethodFilter) params.append('payment_method', paymentMethodFilter);
+      const q = params.toString() ? `?${params.toString()}` : '';
       return apiRequest<PaginatedResponse<Sale>>(`sales/${q}`);
     },
   });
@@ -140,11 +152,35 @@ export const SalesPage: React.FC = () => {
     setCart(cart.filter((_, i) => i !== index));
   };
 
-  const cartTotal = cart.reduce((acc, line) => acc + line.unitPrice * line.quantity, 0);
+  const subtotal = cart.reduce((acc, line) => acc + line.unitPrice * line.quantity, 0);
+  const discountVal = parseFloat(discountValueInput) || 0;
+
+  let calculatedDiscountAmount = 0;
+  if (discountType === 'percent') {
+    calculatedDiscountAmount = Math.round(subtotal * (discountVal / 100) * 100) / 100;
+  } else if (discountType === 'amount') {
+    calculatedDiscountAmount = Math.min(subtotal, Math.round(discountVal * 100) / 100);
+  }
+  const netTotal = Math.max(0, subtotal - calculatedDiscountAmount);
+
+  const isStaff = user?.role === 'Staff';
+  const isDiscountOverStaffLimit =
+    isStaff &&
+    ((discountType === 'percent' && discountVal > 10) ||
+      (discountType === 'amount' && calculatedDiscountAmount > subtotal * 0.10 + 0.005));
+
+  const isDiscountOverSubtotal = discountType === 'amount' && discountVal > subtotal;
+  const isPercentOver100 = discountType === 'percent' && discountVal > 100;
+
   const effectiveAmountPaid =
-    amountPaidInput === '' ? cartTotal : parseFloat(amountPaidInput) || 0;
-  const balanceDue = Math.max(0, cartTotal - effectiveAmountPaid);
-  const isCreditSale = balanceDue > 0.005;
+    amountPaidInput === ''
+      ? paymentMethod === 'credit'
+        ? 0
+        : netTotal
+      : parseFloat(amountPaidInput) || 0;
+
+  const balanceDue = Math.max(0, netTotal - effectiveAmountPaid);
+  const isCreditSale = balanceDue > 0.005 || paymentMethod === 'credit';
   const isCustomerMissing = isCreditSale && !selectedCustomerId;
 
   // Quick Add Customer Mutation
@@ -170,13 +206,22 @@ export const SalesPage: React.FC = () => {
   // Create Sale Mutation
   const createSaleMutation = useMutation({
     mutationFn: () => {
+      if (isDiscountOverStaffLimit) {
+        throw new Error('Staff discount limit is 10%. Higher discounts require Manager or Admin approval.');
+      }
+      if (isPercentOver100) {
+        throw new Error('Discount percentage cannot exceed 100%.');
+      }
+      if (isDiscountOverSubtotal) {
+        throw new Error('Discount amount cannot exceed the subtotal.');
+      }
       if (isCustomerMissing) {
         throw new Error('Credit sales (udhaar) require selecting a registered customer.');
       }
       if (effectiveAmountPaid < 0) {
         throw new Error('Amount paid cannot be negative.');
       }
-      if (effectiveAmountPaid > cartTotal) {
+      if (effectiveAmountPaid > netTotal) {
         throw new Error('Amount paid cannot exceed the sale total.');
       }
 
@@ -189,6 +234,9 @@ export const SalesPage: React.FC = () => {
         body: JSON.stringify({
           warehouse_id: selectedWarehouseId,
           customer_id: selectedCustomerId ? parseInt(selectedCustomerId, 10) : null,
+          discount_type: discountType,
+          discount_value: discountVal.toFixed(2),
+          payment_method: paymentMethod,
           amount_paid: effectiveAmountPaid.toFixed(2),
           notes,
           lines: cart.map((line) => ({
@@ -204,6 +252,9 @@ export const SalesPage: React.FC = () => {
       setNotes('');
       setAmountPaidInput('');
       setSelectedCustomerId('');
+      setDiscountType('none');
+      setDiscountValueInput('');
+      setPaymentMethod('cash');
       setCompletedSale(data);
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['sales-stock'] });
@@ -293,6 +344,41 @@ export const SalesPage: React.FC = () => {
         Completed
       </span>
     );
+  };
+
+  const getPaymentMethodBadge = (method: string) => {
+    switch (method) {
+      case 'cash':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+            <Banknote className="w-3 h-3" /> Cash
+          </span>
+        );
+      case 'upi':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+            <QrCode className="w-3 h-3" /> UPI
+          </span>
+        );
+      case 'card':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+            <CreditCard className="w-3 h-3" /> Card
+          </span>
+        );
+      case 'credit':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+            <Tag className="w-3 h-3" /> Udhaar
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-50 text-gray-700 border border-gray-200">
+            {method || 'Standard'}
+          </span>
+        );
+    }
   };
 
   return (
@@ -463,6 +549,183 @@ export const SalesPage: React.FC = () => {
                 </select>
               </div>
 
+              {/* Discount Section */}
+              <div className="space-y-2 p-3 rounded-lg border border-[#E3E1DA] bg-white">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-[#202521] uppercase flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5 text-[#173D32]" />
+                    Discount
+                  </label>
+                  {isStaff && (
+                    <span className="text-[10px] text-[#5E6B63] font-medium">
+                      Staff Limit: 10%
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#F1F1EC] rounded-md">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscountType('none');
+                      setDiscountValueInput('');
+                    }}
+                    className={`py-1 text-xs font-medium rounded transition-colors ${
+                      discountType === 'none'
+                        ? 'bg-white text-[#173D32] font-semibold shadow-sm'
+                        : 'text-[#5E6B63] hover:text-[#202521]'
+                    }`}
+                  >
+                    None
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscountType('percent');
+                      if (!discountValueInput) setDiscountValueInput('5');
+                    }}
+                    className={`py-1 text-xs font-medium rounded transition-colors flex items-center justify-center gap-1 ${
+                      discountType === 'percent'
+                        ? 'bg-white text-[#173D32] font-semibold shadow-sm'
+                        : 'text-[#5E6B63] hover:text-[#202521]'
+                    }`}
+                  >
+                    <Percent className="w-3 h-3" /> Percent
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiscountType('amount');
+                      if (!discountValueInput) setDiscountValueInput('50');
+                    }}
+                    className={`py-1 text-xs font-medium rounded transition-colors ${
+                      discountType === 'amount'
+                        ? 'bg-white text-[#173D32] font-semibold shadow-sm'
+                        : 'text-[#5E6B63] hover:text-[#202521]'
+                    }`}
+                  >
+                    ₹ Flat
+                  </button>
+                </div>
+
+                {discountType !== 'none' && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        min="0"
+                        step={discountType === 'percent' ? '1' : '0.01'}
+                        placeholder={discountType === 'percent' ? 'Discount % (e.g. 5)' : 'Discount ₹ (e.g. 100)'}
+                        value={discountValueInput}
+                        onChange={(e) => setDiscountValueInput(e.target.value)}
+                        className="h-9 pr-12 text-xs font-bold"
+                      />
+                      <span className="absolute right-3 top-2 text-xs font-semibold text-[#5E6B63] pointer-events-none">
+                        {discountType === 'percent' ? '%' : '₹'}
+                      </span>
+                    </div>
+
+                    {calculatedDiscountAmount > 0 && (
+                      <div className="flex justify-between items-center text-[11px] text-[#2F7D4F] font-semibold">
+                        <span>Discount applied:</span>
+                        <span className="tabular-nums">-{formatCurrency(calculatedDiscountAmount)}</span>
+                      </div>
+                    )}
+
+                    {isDiscountOverStaffLimit && (
+                      <div className="text-[11px] text-[#B3261E] bg-red-50 p-1.5 rounded flex items-start gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>Staff discount limit is 10%. Higher discounts require Manager or Admin approval.</span>
+                      </div>
+                    )}
+                    {isPercentOver100 && (
+                      <div className="text-[11px] text-[#B3261E] bg-red-50 p-1.5 rounded">
+                        Discount percentage cannot exceed 100%.
+                      </div>
+                    )}
+                    {isDiscountOverSubtotal && (
+                      <div className="text-[11px] text-[#B3261E] bg-red-50 p-1.5 rounded">
+                        Discount amount cannot exceed subtotal ({formatCurrency(subtotal)}).
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Payment Method Selector */}
+              <div className="space-y-2 p-3 rounded-lg border border-[#E3E1DA] bg-white">
+                <label className="text-xs font-semibold text-[#202521] uppercase block">
+                  Payment Method
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentMethod('cash');
+                      if (amountPaidInput === '' || paymentMethod === 'credit') {
+                        setAmountPaidInput(netTotal.toFixed(2));
+                      }
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-xs font-semibold border transition-all ${
+                      paymentMethod === 'cash'
+                        ? 'border-[#173D32] bg-[#E6F2EA] text-[#173D32] ring-1 ring-[#173D32]'
+                        : 'border-[#E3E1DA] bg-white text-[#5E6B63] hover:border-gray-400'
+                    }`}
+                  >
+                    <Banknote className="w-3.5 h-3.5" /> Cash
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentMethod('upi');
+                      if (amountPaidInput === '' || paymentMethod === 'credit') {
+                        setAmountPaidInput(netTotal.toFixed(2));
+                      }
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-xs font-semibold border transition-all ${
+                      paymentMethod === 'upi'
+                        ? 'border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600'
+                        : 'border-[#E3E1DA] bg-white text-[#5E6B63] hover:border-gray-400'
+                    }`}
+                  >
+                    <QrCode className="w-3.5 h-3.5" /> UPI
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentMethod('card');
+                      if (amountPaidInput === '' || paymentMethod === 'credit') {
+                        setAmountPaidInput(netTotal.toFixed(2));
+                      }
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-xs font-semibold border transition-all ${
+                      paymentMethod === 'card'
+                        ? 'border-purple-600 bg-purple-50 text-purple-800 ring-1 ring-purple-600'
+                        : 'border-[#E3E1DA] bg-white text-[#5E6B63] hover:border-gray-400'
+                    }`}
+                  >
+                    <CreditCard className="w-3.5 h-3.5" /> Card
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentMethod('credit');
+                      setAmountPaidInput('0.00');
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-xs font-semibold border transition-all ${
+                      paymentMethod === 'credit'
+                        ? 'border-amber-600 bg-amber-50 text-amber-800 ring-1 ring-amber-600'
+                        : 'border-[#E3E1DA] bg-white text-[#5E6B63] hover:border-gray-400'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5" /> Credit (Udhaar)
+                  </button>
+                </div>
+              </div>
+
               {/* Ticket Breakdown */}
               <div className="bg-[#F8F8F5] p-4 rounded-lg space-y-2 border border-[#E3E1DA]">
                 <div className="flex justify-between text-xs text-[#5E6B63]">
@@ -475,10 +738,20 @@ export const SalesPage: React.FC = () => {
                     {cart.reduce((sum, l) => sum + l.quantity, 0)} units
                   </span>
                 </div>
+                <div className="flex justify-between text-xs text-[#5E6B63] pt-1 border-t border-[#E3E1DA]/60">
+                  <span>Subtotal:</span>
+                  <span className="font-semibold text-[#202521] tabular-nums">{formatCurrency(subtotal)}</span>
+                </div>
+                {calculatedDiscountAmount > 0 && (
+                  <div className="flex justify-between text-xs text-[#2F7D4F] font-semibold">
+                    <span>Discount ({discountType === 'percent' ? `${discountVal}%` : 'Flat'}):</span>
+                    <span className="tabular-nums">-{formatCurrency(calculatedDiscountAmount)}</span>
+                  </div>
+                )}
                 <div className="border-t border-[#E3E1DA] pt-2 flex justify-between items-baseline">
-                  <span className="text-sm font-bold text-[#202521]">Total Amount:</span>
+                  <span className="text-sm font-bold text-[#202521]">Net Total:</span>
                   <span className="text-xl font-extrabold text-[#173D32] tabular-nums">
-                    {formatCurrency(cartTotal)}
+                    {formatCurrency(netTotal)}
                   </span>
                 </div>
               </div>
@@ -491,18 +764,18 @@ export const SalesPage: React.FC = () => {
                   </label>
                   <button
                     type="button"
-                    onClick={() => setAmountPaidInput(cartTotal.toFixed(2))}
+                    onClick={() => setAmountPaidInput(netTotal.toFixed(2))}
                     className="text-[11px] text-[#2F7D4F] hover:underline font-medium"
                   >
-                    Pay Full (₹{cartTotal.toFixed(2)})
+                    Pay Full (₹{netTotal.toFixed(2)})
                   </button>
                 </div>
                 <Input
                   type="number"
                   step="0.01"
                   min="0"
-                  max={cartTotal}
-                  placeholder={cartTotal > 0 ? cartTotal.toFixed(2) : '0.00'}
+                  max={netTotal}
+                  placeholder={netTotal > 0 ? netTotal.toFixed(2) : '0.00'}
                   value={amountPaidInput}
                   onChange={(e) => setAmountPaidInput(e.target.value)}
                   className="font-bold text-sm h-10"
@@ -544,7 +817,13 @@ export const SalesPage: React.FC = () => {
               <Button
                 type="button"
                 className="w-full h-11 text-sm font-semibold"
-                disabled={cart.length === 0 || isCustomerMissing}
+                disabled={
+                  cart.length === 0 ||
+                  isCustomerMissing ||
+                  Boolean(isDiscountOverStaffLimit) ||
+                  Boolean(isPercentOver100) ||
+                  Boolean(isDiscountOverSubtotal)
+                }
                 isLoading={createSaleMutation.isPending}
                 onClick={() => createSaleMutation.mutate()}
               >
@@ -557,11 +836,29 @@ export const SalesPage: React.FC = () => {
 
       {/* Sales History Table */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Recent Sales History</CardTitle>
-          <span className="text-xs text-[#5E6B63]">
-            {user?.role === 'Staff' ? 'Your counter transactions' : 'All warehouse sales'}
-          </span>
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">Recent Sales History</CardTitle>
+            <span className="text-xs text-[#5E6B63]">
+              {user?.role === 'Staff' ? 'Your counter transactions' : 'All warehouse sales'}
+            </span>
+          </div>
+
+          {/* Payment Method Filter */}
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-[#5E6B63] font-medium hidden sm:inline">Method:</span>
+            <select
+              value={paymentMethodFilter}
+              onChange={(e) => setPaymentMethodFilter(e.target.value)}
+              className="h-8 px-2.5 rounded-md border border-[#E3E1DA] bg-white text-xs font-medium text-[#202521] focus:outline-none focus:ring-1 focus:ring-[#173D32]"
+            >
+              <option value="">All Methods</option>
+              <option value="cash">Cash</option>
+              <option value="upi">UPI</option>
+              <option value="card">Card</option>
+              <option value="credit">Credit (Udhaar)</option>
+            </select>
+          </div>
         </CardHeader>
         <div className="overflow-x-auto">
           {salesLoading ? (
@@ -576,6 +873,7 @@ export const SalesPage: React.FC = () => {
                   <th className="py-2.5 px-4 font-semibold">Customer</th>
                   <th className="py-2.5 px-4 font-semibold">Warehouse</th>
                   <th className="py-2.5 px-4 font-semibold">Cashier</th>
+                  <th className="py-2.5 px-4 font-semibold">Method</th>
                   <th className="py-2.5 px-4 font-semibold">Lines</th>
                   <th className="py-2.5 px-4 font-semibold">Date &amp; Time</th>
                   <th className="py-2.5 px-4 font-semibold">Status</th>
@@ -609,13 +907,26 @@ export const SalesPage: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 text-[#5E6B63] font-medium">{sale.warehouse_code}</td>
                       <td className="py-3 px-4 text-[#202521] font-medium">{sale.cashier_name}</td>
+                      <td className="py-3 px-4">{getPaymentMethodBadge(sale.payment_method)}</td>
                       <td className="py-3 px-4 text-[#5E6B63] tabular-nums">
                         {sale.lines.length} items
                       </td>
                       <td className="py-3 px-4 text-[#5E6B63]">{formatDate(sale.created_at)}</td>
                       <td className="py-3 px-4">{getReturnStatusBadge(sale)}</td>
                       <td className="py-3 px-4 text-right tabular-nums">
-                        {hasRefund ? (
+                        {parseFloat(sale.discount_amount || '0') > 0 ? (
+                          <div>
+                            <div className="font-bold text-[#173D32]">
+                              {formatCurrency(sale.net_total || sale.total_amount)}
+                            </div>
+                            <div className="text-[10px] text-[#5E6B63] line-through">
+                              {formatCurrency(sale.subtotal || sale.total_amount)}
+                            </div>
+                            <div className="text-[10px] text-[#2F7D4F] font-medium">
+                              -{formatCurrency(sale.discount_amount)} disc
+                            </div>
+                          </div>
+                        ) : hasRefund ? (
                           <div>
                             <div className="font-bold text-[#173D32]">
                               {formatCurrency(sale.net_total || sale.total_amount)}
@@ -744,9 +1055,15 @@ export const SalesPage: React.FC = () => {
               {/* Financial Totals */}
               <div className="bg-[#F8F8F5] p-3 rounded-lg border border-[#E3E1DA] space-y-1 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-[#5E6B63]">Gross Total:</span>
-                  <span className="font-semibold">{formatCurrency(viewingSale.total_amount)}</span>
+                  <span className="text-[#5E6B63]">Subtotal:</span>
+                  <span className="font-semibold">{formatCurrency(viewingSale.subtotal || viewingSale.total_amount)}</span>
                 </div>
+                {parseFloat(viewingSale.discount_amount || '0') > 0 && (
+                  <div className="flex justify-between text-[#2F7D4F]">
+                    <span>Discount ({viewingSale.discount_type === 'percent' ? `${viewingSale.discount_value}%` : 'Flat'}):</span>
+                    <span className="font-semibold">-{formatCurrency(viewingSale.discount_amount)}</span>
+                  </div>
+                )}
                 {parseFloat(viewingSale.total_refunded || '0') > 0 && (
                   <div className="flex justify-between text-red-600">
                     <span>Total Refunded:</span>
@@ -754,12 +1071,16 @@ export const SalesPage: React.FC = () => {
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-sm border-t border-[#E3E1DA] pt-1">
-                  <span>Net Amount:</span>
+                  <span>Net Total:</span>
                   <span className="text-[#173D32]">
                     {formatCurrency(viewingSale.net_total || viewingSale.total_amount)}
                   </span>
                 </div>
-                <div className="flex justify-between text-xs pt-1 border-t border-[#E3E1DA]/60">
+                <div className="flex justify-between items-center text-xs pt-1 border-t border-[#E3E1DA]/60">
+                  <span className="text-[#5E6B63]">Payment Method:</span>
+                  <span>{getPaymentMethodBadge(viewingSale.payment_method)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
                   <span className="text-[#5E6B63]">Amount Paid:</span>
                   <span className="font-semibold text-[#2F7D4F]">{formatCurrency(viewingSale.amount_paid)}</span>
                 </div>
@@ -1097,11 +1418,29 @@ export const SalesPage: React.FC = () => {
 
               {/* Totals Breakdown */}
               <div className="space-y-1 text-xs border-b border-[#E3E1DA] pb-3">
-                <div className="flex justify-between items-center text-sm font-bold">
-                  <span>Total Amount:</span>
+                <div className="flex justify-between items-center text-xs text-[#5E6B63]">
+                  <span>Subtotal:</span>
+                  <span className="tabular-nums">
+                    {formatCurrency(completedSale.subtotal || completedSale.total_amount)}
+                  </span>
+                </div>
+                {parseFloat(completedSale.discount_amount || '0') > 0 && (
+                  <div className="flex justify-between items-center text-xs text-[#2F7D4F]">
+                    <span>Discount ({completedSale.discount_type === 'percent' ? `${completedSale.discount_value}%` : 'Flat'}):</span>
+                    <span className="font-semibold tabular-nums">
+                      -{formatCurrency(completedSale.discount_amount)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center text-sm font-bold border-t border-[#E3E1DA] pt-1">
+                  <span>Net Total:</span>
                   <span className="text-[#173D32] text-base tabular-nums">
                     {formatCurrency(completedSale.total_amount)}
                   </span>
+                </div>
+                <div className="flex justify-between items-center text-xs pt-1">
+                  <span className="text-[#5E6B63]">Payment Method:</span>
+                  <span className="font-semibold uppercase text-[#202521]">{completedSale.payment_method}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs text-[#2F7D4F]">
                   <span>Amount Paid:</span>

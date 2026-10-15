@@ -232,6 +232,9 @@ export interface SaleLine {
 
 export type ReturnStatus = 'not_returned' | 'partially_returned' | 'fully_returned';
 
+export type DiscountType = 'none' | 'amount' | 'percent';
+export type PaymentMethod = 'cash' | 'upi' | 'card' | 'credit' | 'unknown';
+
 export interface Sale {
   id: number;
   sale_number: string;
@@ -243,9 +246,14 @@ export interface Sale {
   customer?: number | null;
   customer_name?: string | null;
   customer_phone?: string | null;
+  subtotal: string;
+  discount_type: DiscountType;
+  discount_value: string;
+  discount_amount: string;
   total_amount: string;
   amount_paid: string;
   balance_due: string;
+  payment_method: PaymentMethod;
   total_refunded?: string;
   net_total?: string;
   return_status?: ReturnStatus;
