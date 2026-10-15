@@ -91,7 +91,7 @@ class ReceiveStockSerializer(serializers.Serializer):
 class AdjustStockSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     delta = serializers.IntegerField()
-    reason = serializers.CharField(required=False, allow_blank=True, default="")
+    reason = serializers.CharField(required=True, allow_blank=False, min_length=2)
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_delta(self, value):

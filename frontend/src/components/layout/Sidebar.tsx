@@ -25,14 +25,8 @@ export const Sidebar: React.FC = () => {
       roles: ['Admin', 'Warehouse Manager', 'Staff'],
     },
     {
-      to: '/warehouses',
-      label: 'Warehouses',
-      icon: WarehouseIcon,
-      roles: ['Admin', 'Warehouse Manager', 'Staff'],
-    },
-    {
       to: '/inventory',
-      label: 'Inventory',
+      label: 'Stock & Inventory',
       icon: Package,
       roles: ['Admin', 'Warehouse Manager', 'Staff'],
     },
@@ -41,6 +35,12 @@ export const Sidebar: React.FC = () => {
       label: 'Sales & Billing',
       icon: ShoppingCart,
       roles: ['Admin', 'Warehouse Manager', 'Staff'],
+    },
+    {
+      to: '/warehouses',
+      label: 'Warehouses',
+      icon: WarehouseIcon,
+      roles: ['Admin', 'Warehouse Manager'],
     },
     {
       to: '/ledger',

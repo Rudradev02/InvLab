@@ -18,6 +18,7 @@ class Sale(TimestampedModel):
     )
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     notes = models.TextField(blank=True, default="")
+    idempotency_key = models.CharField(max_length=64, blank=True, null=True, db_index=True)
 
     class Meta:
         db_table = "sales_sale"

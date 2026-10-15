@@ -103,9 +103,13 @@ export const SalesPage: React.FC = () => {
 
   // Create Sale Mutation
   const createSaleMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<Sale>('sales/', {
+    mutationFn: () => {
+      const idempotencyKey = crypto.randomUUID();
+      return apiRequest<Sale>('sales/', {
         method: 'POST',
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
         body: JSON.stringify({
           warehouse_id: selectedWarehouseId,
           notes,
@@ -114,7 +118,8 @@ export const SalesPage: React.FC = () => {
             quantity: line.quantity,
           })),
         }),
-      }),
+      });
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['stock'] });

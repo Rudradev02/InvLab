@@ -101,16 +101,21 @@ export const InventoryPage: React.FC = () => {
 
   // Receive stock mutation
   const receiveMutation = useMutation({
-    mutationFn: (data: typeof receiveForm) =>
-      apiRequest('stock/receive/', {
+    mutationFn: (data: typeof receiveForm) => {
+      const idempotencyKey = crypto.randomUUID();
+      return apiRequest('stock/receive/', {
         method: 'POST',
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
         body: JSON.stringify({
           product_id: Number(data.product_id),
           quantity: Number(data.quantity),
           reference: data.reference,
           warehouse_id: selectedWarehouseId,
         }),
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
       queryClient.invalidateQueries({ queryKey: ['stock-inventory'] });
@@ -128,16 +133,21 @@ export const InventoryPage: React.FC = () => {
 
   // Adjust stock mutation
   const adjustMutation = useMutation({
-    mutationFn: (data: typeof adjustForm) =>
-      apiRequest('stock/adjust/', {
+    mutationFn: (data: typeof adjustForm) => {
+      const idempotencyKey = crypto.randomUUID();
+      return apiRequest('stock/adjust/', {
         method: 'POST',
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
         body: JSON.stringify({
           product_id: Number(data.product_id),
           delta: Number(data.delta),
           reason: data.reason,
           warehouse_id: selectedWarehouseId,
         }),
-      }),
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
       queryClient.invalidateQueries({ queryKey: ['stock-inventory'] });

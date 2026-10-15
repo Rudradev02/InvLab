@@ -19,6 +19,7 @@ def create_sale(
     lines_data: list[dict],
     user,
     notes: str = "",
+    idempotency_key: str = "",
 ) -> Sale:
     """
     Creates a sale atomically with row-locking, stock checks, and ledger recording.
@@ -29,7 +30,13 @@ def create_sale(
     - Checked after locking
     - Total computed on server (BR-08)
     - Sequential sale number inside transaction from locked counter (NFR-DATA-06)
+    - Idempotency key per user returns existing sale on replay
     """
+    if idempotency_key:
+        existing = Sale.objects.filter(user=user, idempotency_key=idempotency_key).first()
+        if existing:
+            return existing
+
     if not lines_data:
         raise DomainError("A sale must contain at least one line item.", code="empty_sale")
 
@@ -44,6 +51,11 @@ def create_sale(
     sorted_lines = sorted(lines_data, key=lambda x: x["product_id"])
 
     with transaction.atomic():
+        if idempotency_key:
+            existing = Sale.objects.select_for_update().filter(user=user, idempotency_key=idempotency_key).first()
+            if existing:
+                return existing
+
         warehouse = Warehouse.objects.get(pk=warehouse_id)
         if not warehouse.is_active:
             raise DomainError(
@@ -62,6 +74,7 @@ def create_sale(
             user=user,
             total_amount=Decimal("0.00"),
             notes=notes,
+            idempotency_key=idempotency_key or None,
         )
 
         total_amount = Decimal("0.00")

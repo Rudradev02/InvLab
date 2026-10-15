@@ -35,18 +35,40 @@ class SaleViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
         # Admin can view all
         return qs
 
+    def update(self, request, *args, **kwargs):
+        raise PermissionDenied("Sales records are immutable. Use returns or refunds for corrections.")
+
+    def partial_update(self, request, *args, **kwargs):
+        raise PermissionDenied("Sales records are immutable. Use returns or refunds for corrections.")
+
+    def destroy(self, request, *args, **kwargs):
+        raise PermissionDenied("Sales records cannot be deleted.")
+
     def create(self, request, *args, **kwargs):
+        idempotency_key = (
+            request.headers.get("Idempotency-Key")
+            or request.META.get("HTTP_IDEMPOTENCY_KEY")
+            or ""
+        )
+        user = request.user
+        role = get_user_role(user)
+
+        if idempotency_key:
+            existing = Sale.objects.filter(user=user, idempotency_key=idempotency_key).first()
+            if existing:
+                return Response(SaleSerializer(existing).data, status=status.HTTP_200_OK)
+
         serializer = CreateSaleRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        user = request.user
-        role = get_user_role(user)
-
         if role != ROLE_ADMIN:
-            warehouse_id = user.profile.warehouse_id
-            if not warehouse_id:
+            warehouse = getattr(getattr(user, "profile", None), "warehouse", None)
+            if not warehouse:
                 raise PermissionDenied("User is not assigned to any warehouse.")
+            if not warehouse.is_active:
+                raise PermissionDenied("Cannot record sale in a deactivated warehouse.")
+            warehouse_id = warehouse.id
         else:
             warehouse_id = data.get("warehouse_id")
             if not warehouse_id:
@@ -57,6 +79,7 @@ class SaleViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
             lines_data=data["lines"],
             user=user,
             notes=data.get("notes", ""),
+            idempotency_key=idempotency_key,
         )
 
         return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)

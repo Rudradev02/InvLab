@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.db import models
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -137,18 +138,31 @@ class StockLevelViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], permission_classes=[IsStaff])
     def receive(self, request):
+        user = request.user
+        role = get_user_role(user)
+        idempotency_key = (
+            request.headers.get("Idempotency-Key")
+            or request.META.get("HTTP_IDEMPOTENCY_KEY")
+            or ""
+        )
+        cache_key = f"idempotency:stock_receive:{user.id}:{idempotency_key}" if idempotency_key else None
+        if cache_key:
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return Response(cached_data, status=status.HTTP_200_OK)
+
         serializer = ReceiveStockSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        user = request.user
-        role = get_user_role(user)
-
         # Scoping rule: staff & managers always operate on own warehouse
         if role != ROLE_ADMIN:
-            warehouse_id = user.profile.warehouse_id
-            if not warehouse_id:
+            warehouse = getattr(getattr(user, "profile", None), "warehouse", None)
+            if not warehouse:
                 raise PermissionDenied("User is not assigned to any warehouse.")
+            if not warehouse.is_active:
+                raise PermissionDenied("Cannot receive stock in a deactivated warehouse.")
+            warehouse_id = warehouse.id
         else:
             warehouse_id = data.get("warehouse_id")
             if not warehouse_id:
@@ -161,21 +175,37 @@ class StockLevelViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
             user=user,
             reference=data.get("reference", ""),
         )
-        return Response(StockLevelSerializer(stock_level).data, status=status.HTTP_201_CREATED)
+        resp_data = StockLevelSerializer(stock_level).data
+        if cache_key:
+            cache.set(cache_key, resp_data, timeout=86400)
+        return Response(resp_data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"], permission_classes=[IsStaff])
     def adjust(self, request):
+        user = request.user
+        role = get_user_role(user)
+        idempotency_key = (
+            request.headers.get("Idempotency-Key")
+            or request.META.get("HTTP_IDEMPOTENCY_KEY")
+            or ""
+        )
+        cache_key = f"idempotency:stock_adjust:{user.id}:{idempotency_key}" if idempotency_key else None
+        if cache_key:
+            cached_data = cache.get(cache_key)
+            if cached_data:
+                return Response(cached_data, status=status.HTTP_200_OK)
+
         serializer = AdjustStockSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        user = request.user
-        role = get_user_role(user)
-
         if role != ROLE_ADMIN:
-            warehouse_id = user.profile.warehouse_id
-            if not warehouse_id:
+            warehouse = getattr(getattr(user, "profile", None), "warehouse", None)
+            if not warehouse:
                 raise PermissionDenied("User is not assigned to any warehouse.")
+            if not warehouse.is_active:
+                raise PermissionDenied("Cannot adjust stock in a deactivated warehouse.")
+            warehouse_id = warehouse.id
         else:
             warehouse_id = data.get("warehouse_id")
             if not warehouse_id:
@@ -188,7 +218,10 @@ class StockLevelViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
             user=user,
             reason=data.get("reason", ""),
         )
-        return Response(StockLevelSerializer(stock_level).data, status=status.HTTP_200_OK)
+        resp_data = StockLevelSerializer(stock_level).data
+        if cache_key:
+            cache.set(cache_key, resp_data, timeout=86400)
+        return Response(resp_data, status=status.HTTP_200_OK)
 
 
 class StockMovementViewSet(
