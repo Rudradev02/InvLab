@@ -81,7 +81,7 @@ export const DashboardPage: React.FC = () => {
   // KPIs
   const totalUnits = stocks.reduce((acc, curr) => acc + curr.quantity, 0);
   const lowStockItems = stocks.filter((s) => s.quantity <= s.reorder_level);
-  const totalSalesAmount = sales.reduce((acc, curr) => acc + parseFloat(curr.total_amount || '0'), 0);
+  const totalSalesAmount = sales.reduce((acc, curr) => acc + parseFloat(curr.net_total || curr.total_amount || '0'), 0);
 
   return (
     <div className="space-y-6">

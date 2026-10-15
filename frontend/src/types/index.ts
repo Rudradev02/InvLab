@@ -189,6 +189,35 @@ export interface StockMovement {
   created_at: string;
 }
 
+export interface SaleReturnLine {
+  id: number;
+  sale_line: number;
+  product?: Product;
+  product_sku: string;
+  product_name: string;
+  quantity: number;
+  unit_price: string;
+  refund_amount: string;
+}
+
+export interface SaleReturn {
+  id: number;
+  return_number: string;
+  sale: number;
+  sale_number: string;
+  warehouse: number;
+  warehouse_name: string;
+  warehouse_code: string;
+  processed_by: number;
+  processed_by_username: string;
+  total_refund_amount: string;
+  refund_method: string;
+  reason: string;
+  lines: SaleReturnLine[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SaleLine {
   id: number;
   product: Product;
@@ -197,7 +226,11 @@ export interface SaleLine {
   quantity: number;
   unit_price: string;
   subtotal: string;
+  returned_quantity?: number;
+  returnable_quantity?: number;
 }
+
+export type ReturnStatus = 'not_returned' | 'partially_returned' | 'fully_returned';
 
 export interface Sale {
   id: number;
@@ -208,8 +241,12 @@ export interface Sale {
   user: number;
   cashier_name: string;
   total_amount: string;
+  total_refunded?: string;
+  net_total?: string;
+  return_status?: ReturnStatus;
   notes: string;
   lines: SaleLine[];
+  returns?: SaleReturn[];
   created_at: string;
   updated_at: string;
 }

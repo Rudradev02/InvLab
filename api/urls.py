@@ -12,7 +12,7 @@ from accounts.views import (
 from audit.views import AuditLogViewSet
 from catalog.views import CategoryViewSet, ProductViewSet
 from inventory.views import StockLevelViewSet, StockMovementViewSet
-from sales.views import SaleViewSet
+from sales.views import SaleReturnViewSet, SaleViewSet
 from transfers.views import StockTransferViewSet
 from warehouses.views import WarehouseViewSet
 
@@ -24,6 +24,7 @@ router.register(r"products", ProductViewSet, basename="product")
 router.register(r"stock", StockLevelViewSet, basename="stock")
 router.register(r"ledger", StockMovementViewSet, basename="ledger")
 router.register(r"sales", SaleViewSet, basename="sale")
+router.register(r"returns", SaleReturnViewSet, basename="return")
 router.register(r"transfers", StockTransferViewSet, basename="transfer")
 router.register(r"audit", AuditLogViewSet, basename="audit")
 
