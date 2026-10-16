@@ -24,7 +24,7 @@ Suggested Build Order: 22, 21, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 | 14 | GST-ready invoices | done | `e825757` | BusinessSettings, CGST/SGST/IGST breakdown, locked sequential FY numbering, ReportLab PDF with canvas page numbering & HSN summary, words in Lakh/Crore, SettingsPage & InvoiceModal UI |
 | 15 | Barcode and QR scanning | done | `eb24433` | Product.barcode unique null, lookup endpoint, lazy BarcodeScannerModal (camera BarcodeDetector, USB keyboard wedge, manual), Inventory modal barcode |
 | 16 | Low-stock emails and daily summary | done | `6584bfe` | NotificationSettings, LowStockAlertState anti-spam & restock reset, on_commit email, send_daily_summary command, TopBar alert bell popover, SettingsPage UI |
-| 17 | Product images | todo | - | Product image upload & thumbnail (Ask first on storage) |
+| 17 | Product images | done | `e97267b` | Pillow validation, 240x240 WebP thumbnails, Cloudinary/local storage fallback, drag-and-drop upload with preview, table & sales thumbnail cards |
 | 18 | Batch and expiry tracking | todo | - | FEFO batch deduction & expiry alerts |
 | 19 | Dark mode | todo | - | Full dark token palette & theme switcher |
 | 20 | Global search (Ctrl+K) | todo | - | Command palette for navigation & entities |
