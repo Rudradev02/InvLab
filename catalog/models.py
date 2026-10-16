@@ -45,7 +45,27 @@ class Product(TimestampedModel):
         default="",
         help_text="Harmonized System of Nomenclature code",
     )
+    barcode = models.CharField(
+        max_length=64,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Optional barcode or QR code string (UPC, EAN, Code128, etc.)",
+    )
     is_active = models.BooleanField(default=True)
+
+    def clean(self):
+        super().clean()
+        if self.barcode is not None:
+            stripped = self.barcode.strip()
+            self.barcode = stripped if stripped else None
+
+    def save(self, *args, **kwargs):
+        if self.barcode is not None:
+            stripped = self.barcode.strip()
+            self.barcode = stripped if stripped else None
+        super().save(*args, **kwargs)
 
     class Meta:
         db_table = "catalog_product"

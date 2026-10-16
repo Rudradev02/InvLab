@@ -144,6 +144,7 @@ export interface Product {
   cost_price?: string;
   gst_rate?: string;
   hsn_code?: string;
+  barcode?: string | null;
   default_reorder_level: number;
   is_active: boolean;
   created_at: string;

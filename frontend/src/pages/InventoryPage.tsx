@@ -22,6 +22,7 @@ import {
   Plus,
   Edit,
   PackagePlus,
+  QrCode,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -87,6 +88,7 @@ export const InventoryPage: React.FC = () => {
     cost_price: '',
     gst_rate: '18.00',
     hsn_code: '8517',
+    barcode: '',
     default_reorder_level: 5,
     description: '',
   });
@@ -101,6 +103,7 @@ export const InventoryPage: React.FC = () => {
       cost_price: '',
       gst_rate: '18.00',
       hsn_code: '8517',
+      barcode: '',
       default_reorder_level: 5,
       description: '',
     });
@@ -117,6 +120,7 @@ export const InventoryPage: React.FC = () => {
       cost_price: prod.cost_price || '0.00',
       gst_rate: prod.gst_rate || '18.00',
       hsn_code: prod.hsn_code || '',
+      barcode: prod.barcode || '',
       default_reorder_level: prod.default_reorder_level || 5,
       description: prod.description || '',
     });
@@ -133,6 +137,7 @@ export const InventoryPage: React.FC = () => {
         cost_price: productForm.cost_price || '0.00',
         gst_rate: productForm.gst_rate || '0.00',
         hsn_code: productForm.hsn_code || '',
+        barcode: productForm.barcode?.trim() || null,
         default_reorder_level: Number(productForm.default_reorder_level),
         description: productForm.description,
       };
@@ -644,7 +649,13 @@ export const InventoryPage: React.FC = () => {
                     className="hover:bg-[#F8F8F5]/80 transition-colors cursor-pointer group"
                   >
                     <td className="py-3.5 px-5 font-mono font-semibold text-[#173D32]">
-                      {item.product.sku}
+                      <div>{item.product.sku}</div>
+                      {item.product.barcode && (
+                        <div className="text-[10px] text-[#5E6B63] flex items-center gap-1 font-normal font-sans mt-0.5">
+                          <QrCode className="w-2.5 h-2.5 text-[#173D32]" />
+                          <span className="font-mono">{item.product.barcode}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3.5 px-5 font-semibold text-[#202521]">
                       {item.product.name}
@@ -1077,24 +1088,32 @@ export const InventoryPage: React.FC = () => {
                 onChange={(e) => setProductForm({ ...productForm, sku: e.target.value.toUpperCase() })}
                 placeholder="e.g. ELEC-001"
               />
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[#5E6B63] mb-1.5">
-                  Category *
-                </label>
-                <select
-                  required
-                  value={productForm.category}
-                  onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
-                  className="w-full h-10 px-3 py-2 text-xs bg-white border border-[#E3E1DA] rounded-md text-[#202521] focus:ring-2 focus:ring-[#173D32] outline-none"
-                >
-                  <option value="">-- Choose Category --</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Input
+                label="Barcode / EAN (Optional)"
+                value={productForm.barcode}
+                onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
+                placeholder="e.g. 8901234567890"
+                helperText="Scannable barcode or QR"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#5E6B63] mb-1.5">
+                Category *
+              </label>
+              <select
+                required
+                value={productForm.category}
+                onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                className="w-full h-10 px-3 py-2 text-xs bg-white border border-[#E3E1DA] rounded-md text-[#202521] focus:ring-2 focus:ring-[#173D32] outline-none"
+              >
+                <option value="">-- Choose Category --</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <Input

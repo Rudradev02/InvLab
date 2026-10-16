@@ -1,14 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../lib/api';
-import { Sale, StockLevel, PaginatedResponse, SaleReturn, Customer, DiscountType, PaymentMethod, BusinessSettings } from '../types';
+import { Sale, StockLevel, PaginatedResponse, SaleReturn, Customer, DiscountType, PaymentMethod, BusinessSettings, Product } from '../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { InvoiceModal } from '../components/sales/InvoiceModal';
 import { formatCurrency, formatDate } from '../lib/format';
+
+const BarcodeScannerModal = React.lazy(
+  () => import('../components/sales/BarcodeScannerModal')
+);
 import {
   ShoppingCart,
   Plus,
@@ -110,6 +114,7 @@ export const SalesPage: React.FC = () => {
   const [placeOfSupply, setPlaceOfSupply] = useState<string>('Maharashtra');
   const [customerGstin, setCustomerGstin] = useState<string>('');
   const [invoiceModalSaleId, setInvoiceModalSaleId] = useState<number | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
 
   // Business settings query
   const { data: bizSettings } = useQuery<BusinessSettings>({
@@ -227,6 +232,92 @@ export const SalesPage: React.FC = () => {
   const handleRemoveFromCart = (index: number) => {
     setCart(cart.filter((_, i) => i !== index));
   };
+
+  const handleProductScanned = useCallback(
+    (product: Product) => {
+      const stockItem = availableStock.find((s) => s.product.id === product.id);
+      if (!stockItem || stockItem.quantity <= 0) {
+        toast.error(`"${product.name}" (${product.sku}) is out of stock in this warehouse.`);
+        return;
+      }
+
+      setCart((prev) => {
+        const existingIdx = prev.findIndex((l) => l.productId === product.id);
+        if (existingIdx > -1) {
+          const cur = prev[existingIdx];
+          if (cur.quantity + 1 > stockItem.quantity) {
+            toast.error(`Only ${stockItem.quantity} units available in stock.`);
+            return prev;
+          }
+          const updated = [...prev];
+          updated[existingIdx] = { ...cur, quantity: cur.quantity + 1 };
+          return updated;
+        }
+        return [
+          ...prev,
+          {
+            productId: stockItem.product.id,
+            productName: stockItem.product.name,
+            sku: stockItem.product.sku,
+            unitPrice: parseFloat(stockItem.product.price),
+            quantity: 1,
+            availableStock: stockItem.quantity,
+            gstRate: parseFloat(stockItem.product.gst_rate || '0') || 0,
+            hsnCode: stockItem.product.hsn_code || '',
+          },
+        ];
+      });
+    },
+    [availableStock]
+  );
+
+  // Global USB Barcode Scanner hardware listener
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isScannerOpen) return;
+
+      const target = e.target as HTMLElement;
+      const isInput =
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+
+      const now = Date.now();
+      const diff = now - lastKeyTime;
+      lastKeyTime = now;
+
+      if (e.key === 'Enter') {
+        if (buffer.length >= 3 && diff < 80) {
+          if (isInput) {
+            e.preventDefault();
+            (target as HTMLElement).blur?.();
+          }
+          const code = buffer.trim();
+          buffer = '';
+          apiRequest<Product>(`products/lookup-barcode/?barcode=${encodeURIComponent(code)}`)
+            .then((prod) => {
+              handleProductScanned(prod);
+              toast.success(`Scanned: ${prod.name}`);
+            })
+            .catch(() => {
+              toast.error(`No product found for barcode "${code}".`);
+            });
+        } else {
+          buffer = '';
+        }
+      } else if (e.key.length === 1) {
+        if (diff > 80) {
+          buffer = e.key;
+        } else {
+          buffer += e.key;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleProductScanned, isScannerOpen]);
 
   const subtotal = cart.reduce((acc, line) => acc + line.unitPrice * line.quantity, 0);
   const discountVal = parseFloat(discountValueInput) || 0;
@@ -553,12 +644,24 @@ export const SalesPage: React.FC = () => {
         <div className="lg:col-span-8 space-y-6">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>Select Products for Sale</span>
-                <span className="text-xs font-normal text-[#5E6B63]">
-                  Stock reflects active warehouse
-                </span>
-              </CardTitle>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base">Select Products for Sale</CardTitle>
+                  <span className="text-xs font-normal text-[#5E6B63]">
+                    Stock reflects active warehouse • USB scanners active anytime
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => setIsScannerOpen(true)}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 border-[#173D32] text-[#173D32] hover:bg-[#E6F2EA] font-semibold"
+                >
+                  <QrCode className="w-4 h-4 text-[#173D32]" />
+                  Scan Barcode / QR
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
@@ -1818,6 +1921,18 @@ export const SalesPage: React.FC = () => {
         isOpen={Boolean(invoiceModalSaleId)}
         onClose={() => setInvoiceModalSaleId(null)}
       />
+
+      {/* Barcode & QR Scanner Modal (Lazy Loaded) */}
+      <React.Suspense fallback={null}>
+        {isScannerOpen && (
+          <BarcodeScannerModal
+            isOpen={isScannerOpen}
+            onClose={() => setIsScannerOpen(false)}
+            onProductScanned={handleProductScanned}
+            availableStock={availableStock}
+          />
+        )}
+      </React.Suspense>
     </div>
   );
 };

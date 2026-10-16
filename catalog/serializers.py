@@ -17,6 +17,12 @@ class CategorySerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
+    barcode = serializers.CharField(
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        validators=[],
+    )
     is_active = serializers.BooleanField(default=True)
 
     class Meta:
@@ -32,6 +38,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "cost_price",
             "gst_rate",
             "hsn_code",
+            "barcode",
             "stock",
             "default_reorder_level",
             "is_active",
@@ -48,4 +55,20 @@ class ProductSerializer(serializers.ModelSerializer):
     def validate_cost_price(self, value):
         if value is not None and value < 0:
             raise serializers.ValidationError("Cost price cannot be negative.")
+        return value
+
+    def validate_barcode(self, value):
+        if not value:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        qs = Product.objects.filter(barcode__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        existing = qs.first()
+        if existing:
+            raise serializers.ValidationError(
+                f"A product with barcode '{value}' already exists ({existing.name} - SKU: {existing.sku})."
+            )
         return value
