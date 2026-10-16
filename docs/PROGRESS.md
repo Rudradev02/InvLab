@@ -20,7 +20,7 @@ Suggested Build Order: 22, 21, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 | 10 | Discounts and payment methods | done | `5544902` | Subtotal, flat/percent discount, staff 10% limit check, payment methods (Cash, UPI, Card, Credit/Udhaar), receipt breakdown & filters |
 | 11 | Reports with exports | done | `a5aa808` | Report registry, 4 reports (sales summary, sales by product, stock list, low stock), CSV stream with injection safety, openpyxl Excel, ReportLab PDF, Asia/Kolkata boundaries, ReportsPage UI |
 | 12 | Suppliers and purchase orders | done | `d48968a` | Suppliers directory, PurchaseOrder lifecycle (draft/ordered/partially_received/received/cancelled), partial receipts with over-receiving guards, weighted-average cost accounting, PurchasingPage UI |
-| 13 | Profit tracking | todo | - | Cost price snapshots, gross margin & profit metrics |
+| 13 | Profit tracking | done | `37fac7e` | SaleLine.unit_cost snapshot, DashboardView API (gross profit, margin %, daily trends, unknown cost count), margin badge in table, live margin preview in product modal, Profit & Margin report in registry |
 | 14 | GST-ready invoices | todo | - | CGST, SGST, IGST tax invoice calculations & numbering |
 | 15 | Barcode and QR scanning | todo | - | Product barcode lookup, scanner UI |
 | 16 | Low-stock emails and daily summary | todo | - | Email notifications on reorder threshold |
