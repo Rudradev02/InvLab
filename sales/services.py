@@ -154,12 +154,19 @@ def create_sale(
             line_subtotal = unit_price * Decimal(qty)
             subtotal_amount += line_subtotal
 
+            # Cost price snapshot: if product cost_price is set and > 0, copy as snapshot.
+            # Missing or 0 cost price is stored as None (unknown cost, never treated as 0).
+            unit_cost = None
+            if product.cost_price is not None and product.cost_price > Decimal("0.00"):
+                unit_cost = product.cost_price
+
             SaleLine.objects.create(
                 sale=sale,
                 product=product,
                 quantity=qty,
                 unit_price=unit_price,
                 subtotal=line_subtotal,
+                unit_cost=unit_cost,
             )
 
         # Discount Validation & Calculation

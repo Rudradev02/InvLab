@@ -72,6 +72,7 @@ class SaleLineSerializer(serializers.ModelSerializer):
             "product_name",
             "quantity",
             "unit_price",
+            "unit_cost",
             "subtotal",
             "returned_quantity",
             "returnable_quantity",

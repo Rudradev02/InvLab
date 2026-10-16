@@ -82,6 +82,13 @@ class SaleLine(models.Model):
     quantity = models.PositiveIntegerField()
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
+    unit_cost = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Snapshot of Product.cost_price at time of sale",
+    )
 
     class Meta:
         db_table = "sales_sale_line"

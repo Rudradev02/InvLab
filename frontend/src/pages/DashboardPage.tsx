@@ -1,14 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '../lib/api';
-import { StockLevel, Sale, StockMovement, PaginatedResponse, WarehouseFullDetail, StockTransfer } from '../types';
+import {
+  StockLevel,
+  Sale,
+  StockMovement,
+  PaginatedResponse,
+  WarehouseFullDetail,
+  StockTransfer,
+  DashboardData,
+} from '../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { StockIndicator } from '../components/ui/stock-indicator';
 import { Badge } from '../components/ui/badge';
 import { formatCurrency, formatNumber, formatDate } from '../lib/format';
 import {
-  Package,
   AlertTriangle,
   TrendingUp,
   Boxes,
@@ -22,12 +29,37 @@ import {
   Truck,
   ArrowRight,
   IndianRupee,
+  BadgePercent,
+  Info,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts';
 
 export const DashboardPage: React.FC = () => {
   const { user, selectedWarehouseId } = useAuth();
   const isManager = user?.role === 'Warehouse Manager';
+
+  // Time range & chart metric filter
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('7d');
+  const [chartMetric, setChartMetric] = useState<'both' | 'revenue' | 'profit'>('both');
+
+  // Unified Dashboard API query
+  const { data: dashboardData, isLoading: isDashboardLoading } = useQuery({
+    queryKey: ['dashboard-metrics', selectedWarehouseId, timeRange],
+    queryFn: () => {
+      const wh = selectedWarehouseId ? `&warehouse=${selectedWarehouseId}` : '';
+      return apiRequest<DashboardData>(`dashboard/?range=${timeRange}${wh}`);
+    },
+  });
 
   // Query manager warehouse full details if Warehouse Manager
   const { data: myWarehouseData } = useQuery({
@@ -89,10 +121,36 @@ export const DashboardPage: React.FC = () => {
   const movements = ledgerData?.results || [];
   const incomingTransfersCount = incomingTransfersData?.count ?? incomingTransfersData?.results?.length ?? 0;
 
-  // KPIs
-  const totalUnits = stocks.reduce((acc, curr) => acc + curr.quantity, 0);
-  const lowStockItems = stocks.filter((s) => s.quantity <= s.reorder_level);
-  const totalSalesAmount = sales.reduce((acc, curr) => acc + parseFloat(curr.net_total || curr.total_amount || '0'), 0);
+  // Derived metrics from unified Dashboard API
+  const totalUnits = dashboardData?.kpis
+    ? dashboardData.kpis.total_units
+    : stocks.reduce((acc, curr) => acc + curr.quantity, 0);
+
+  const lowStockCount = dashboardData?.kpis
+    ? dashboardData.kpis.low_stock_count
+    : stocks.filter((s) => s.quantity <= s.reorder_level).length;
+
+  const totalSalesAmount = dashboardData?.kpis
+    ? parseFloat(dashboardData.kpis.total_revenue)
+    : sales.reduce((acc, curr) => acc + parseFloat(curr.net_total || curr.total_amount || '0'), 0);
+
+  const grossProfit = dashboardData?.kpis
+    ? parseFloat(dashboardData.kpis.gross_profit)
+    : 0;
+
+  const profitMarginPct = dashboardData?.kpis
+    ? dashboardData.kpis.profit_margin_pct
+    : 0;
+
+  const unknownCostCount = dashboardData?.kpis
+    ? dashboardData.kpis.unknown_cost_count
+    : 0;
+
+  const receivablesAmount = dashboardData?.kpis
+    ? dashboardData.kpis.total_receivables
+    : receivablesData?.total_receivables || '0.00';
+
+  const dailyChartData = dashboardData?.daily_chart || [];
 
   return (
     <div className="space-y-6">
@@ -196,7 +254,7 @@ export const DashboardPage: React.FC = () => {
             to="/transfers"
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-amber-800 text-white text-xs font-semibold hover:bg-amber-900 transition-colors shrink-0 shadow-xs"
           >
-            Review & Receive <ArrowRight className="w-3.5 h-3.5" />
+            Review &amp; Receive <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       )}
@@ -227,7 +285,7 @@ export const DashboardPage: React.FC = () => {
                 Low Stock Alerts
               </p>
               <h3 className="text-2xl font-bold text-[#9A5B00] mt-1 tabular-nums">
-                {lowStockItems.length}
+                {lowStockCount}
               </h3>
               <p className="text-xs text-[#5E6B63] mt-0.5">Requires replenishment</p>
             </div>
@@ -241,15 +299,56 @@ export const DashboardPage: React.FC = () => {
           <CardContent className="p-5 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-[#5E6B63]">
-                Total Recorded Sales
+                Net Recorded Revenue
               </p>
               <h3 className="text-2xl font-bold text-[#202521] mt-1 tabular-nums">
                 {formatCurrency(totalSalesAmount)}
               </h3>
-              <p className="text-xs text-[#5E6B63] mt-0.5">{sales.length} transactions processed</p>
+              <p className="text-xs text-[#5E6B63] mt-0.5">Net of discounts &amp; returns</p>
             </div>
             <div className="w-11 h-11 rounded-lg bg-[#FBE9E7] flex items-center justify-center text-[#C77B55]">
               <TrendingUp className="w-5 h-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Profit KPI Card */}
+        <Card className="border-l-4 border-l-[#2F7D4F]">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#5E6B63]">
+                  Gross Profit
+                </p>
+                {profitMarginPct > 0 && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      profitMarginPct >= 20
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : profitMarginPct > 0
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {profitMarginPct.toFixed(1)}% margin
+                  </span>
+                )}
+              </div>
+              <h3 className="text-2xl font-bold mt-1 tabular-nums text-emerald-800">
+                {formatCurrency(grossProfit)}
+              </h3>
+              <p className="text-xs text-[#5E6B63] mt-0.5">
+                {unknownCostCount > 0 ? (
+                  <span className="text-amber-700 font-medium">
+                    {unknownCostCount} sales excluded: cost unknown
+                  </span>
+                ) : (
+                  'All items cost accounted'
+                )}
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-lg bg-[#E6F2EA] flex items-center justify-center text-[#2F7D4F]">
+              <BadgePercent className="w-5 h-5" />
             </div>
           </CardContent>
         </Card>
@@ -261,7 +360,7 @@ export const DashboardPage: React.FC = () => {
                 Receivables (Udhaar)
               </p>
               <h3 className="text-2xl font-bold text-[#B3261E] mt-1 tabular-nums">
-                {formatCurrency(receivablesData?.total_receivables || '0.00')}
+                {formatCurrency(receivablesAmount)}
               </h3>
               <Link to="/customers" className="text-xs text-[#B3261E] hover:underline mt-0.5 block">
                 Manage credit &rarr;
@@ -272,24 +371,182 @@ export const DashboardPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-
-        <Card className="border-l-4 border-l-[#1F5F8B]">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-[#5E6B63]">
-                Catalog Products
-              </p>
-              <h3 className="text-2xl font-bold text-[#202521] mt-1 tabular-nums">
-                {stocks.length}
-              </h3>
-              <p className="text-xs text-[#5E6B63] mt-0.5">Active SKU items</p>
-            </div>
-            <div className="w-11 h-11 rounded-lg bg-[#E5EFF6] flex items-center justify-center text-[#1F5F8B]">
-              <Package className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
       </div>
+
+      {/* Revenue & Profit Analytics Chart */}
+      <Card className="bg-white">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-[#E3E1DA]">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-[#173D32]" />
+              <span>Revenue &amp; Profit Trends</span>
+            </CardTitle>
+            <p className="text-xs text-[#5E6B63] mt-0.5">
+              Historical performance reflecting net sales and cost of goods sold
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Metric Toggle */}
+            <div className="inline-flex rounded-md border border-[#E3E1DA] p-0.5 bg-[#F8F8F5] text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setChartMetric('both')}
+                className={`px-2.5 py-1 rounded-sm transition-all cursor-pointer ${
+                  chartMetric === 'both' ? 'bg-white shadow-xs text-[#173D32]' : 'text-[#5E6B63]'
+                }`}
+              >
+                Both
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartMetric('revenue')}
+                className={`px-2.5 py-1 rounded-sm transition-all cursor-pointer ${
+                  chartMetric === 'revenue' ? 'bg-white shadow-xs text-[#173D32]' : 'text-[#5E6B63]'
+                }`}
+              >
+                Revenue
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartMetric('profit')}
+                className={`px-2.5 py-1 rounded-sm transition-all cursor-pointer ${
+                  chartMetric === 'profit' ? 'bg-white shadow-xs text-emerald-800' : 'text-[#5E6B63]'
+                }`}
+              >
+                Profit
+              </button>
+            </div>
+
+            {/* Time Range Toggle */}
+            <div className="inline-flex rounded-md border border-[#E3E1DA] p-0.5 bg-[#F8F8F5] text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setTimeRange('7d')}
+                className={`px-2.5 py-1 rounded-sm transition-all cursor-pointer ${
+                  timeRange === '7d' ? 'bg-white shadow-xs text-[#173D32]' : 'text-[#5E6B63]'
+                }`}
+              >
+                7 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeRange('30d')}
+                className={`px-2.5 py-1 rounded-sm transition-all cursor-pointer ${
+                  timeRange === '30d' ? 'bg-white shadow-xs text-[#173D32]' : 'text-[#5E6B63]'
+                }`}
+              >
+                30 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeRange('90d')}
+                className={`px-2.5 py-1 rounded-sm transition-all cursor-pointer ${
+                  timeRange === '90d' ? 'bg-white shadow-xs text-[#173D32]' : 'text-[#5E6B63]'
+                }`}
+              >
+                90 Days
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="pt-4">
+          <div className="h-72 w-full">
+            {isDashboardLoading ? (
+              <div className="h-full flex items-center justify-center text-xs text-[#5E6B63]">
+                Loading trend analytics...
+              </div>
+            ) : dailyChartData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-[#5E6B63]">
+                No recorded sales in this period.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dailyChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#173D32" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#173D32" stopOpacity={0.0} />
+                    </linearGradient>
+                    <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2F7D4F" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#2F7D4F" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E3E1DA" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tickLine={false}
+                    stroke="#5E6B63"
+                    fontSize={11}
+                    tickFormatter={(str) => {
+                      const d = new Date(str);
+                      return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+                    }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    stroke="#5E6B63"
+                    fontSize={11}
+                    tickFormatter={(val) => `₹${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E3E1DA', borderRadius: '8px', fontSize: '12px' }}
+                    formatter={(value: any, name: any) => [
+                      formatCurrency(Number(value) || 0),
+                      name === 'revenue' ? 'Net Revenue' : 'Gross Profit',
+                    ]}
+                    labelFormatter={(label) => `Date: ${label}`}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: '11px', paddingBottom: '10px' }}
+                  />
+                  {(chartMetric === 'both' || chartMetric === 'revenue') && (
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      name="Revenue"
+                      stroke="#173D32"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#colorRevenue)"
+                    />
+                  )}
+                  {(chartMetric === 'both' || chartMetric === 'profit') && (
+                    <Area
+                      type="monotone"
+                      dataKey="profit"
+                      name="Gross Profit"
+                      stroke="#2F7D4F"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#colorProfit)"
+                    />
+                  )}
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {unknownCostCount > 0 && (
+            <div className="mt-3 pt-3 border-t border-[#E3E1DA]/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#5E6B63]">
+              <span className="flex items-center gap-1.5 text-amber-800">
+                <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>
+                  <strong>{unknownCostCount} sales excluded: cost unknown</strong> (items sold without recorded cost price)
+                </span>
+              </span>
+              <Link to="/reports" className="text-xs font-semibold text-[#173D32] hover:underline">
+                View Profit &amp; Margin Report &rarr;
+              </Link>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Main Content Grid: Stock Indicators & Recent Activities */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

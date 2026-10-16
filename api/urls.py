@@ -34,6 +34,8 @@ router.register(r"returns", SaleReturnViewSet, basename="return")
 router.register(r"transfers", StockTransferViewSet, basename="transfer")
 router.register(r"audit", AuditLogViewSet, basename="audit")
 
+from api.dashboard_views import DashboardView
+
 urlpatterns = [
     # Auth endpoints
     path("auth/csrf/", CsrfView.as_view(), name="auth-csrf"),
@@ -41,6 +43,8 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="auth-logout"),
     path("auth/me/", MeView.as_view(), name="auth-me"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
+    # Dashboard endpoint
+    path("dashboard/", DashboardView.as_view(), name="dashboard"),
     # Reports endpoints
     path("reports/", include("reports.urls")),
     # Router endpoints under /api/v1/

@@ -226,9 +226,36 @@ export interface SaleLine {
   product_name: string;
   quantity: number;
   unit_price: string;
+  unit_cost?: string | null;
   subtotal: string;
   returned_quantity?: number;
   returnable_quantity?: number;
+}
+
+export interface DashboardKPIs {
+  total_revenue: string;
+  gross_profit: string;
+  profit_margin_pct: number;
+  unknown_cost_count: number;
+  sales_count: number;
+  total_units: number;
+  low_stock_count: number;
+  total_receivables: string;
+  pending_transfers: number;
+}
+
+export interface DashboardDailyChartPoint {
+  date: string;
+  revenue: number;
+  profit: number;
+  sales_count: number;
+}
+
+export interface DashboardData {
+  range: string;
+  warehouse_id?: number | null;
+  kpis: DashboardKPIs;
+  daily_chart: DashboardDailyChartPoint[];
 }
 
 export type ReturnStatus = 'not_returned' | 'partially_returned' | 'fully_returned';
