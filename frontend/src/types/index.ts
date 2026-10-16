@@ -141,6 +141,7 @@ export interface Product {
   category_name: string;
   description: string;
   price: string;
+  cost_price?: string;
   default_reorder_level: number;
   is_active: boolean;
   created_at: string;
@@ -378,5 +379,60 @@ export interface ReportData {
   payment_methods_breakdown?: Record<string, { count: number; amount: number }>;
   columns: ReportColumn[];
   rows: Record<string, any>[];
+}
+
+export type PurchaseOrderStatus =
+  | 'draft'
+  | 'ordered'
+  | 'partially_received'
+  | 'received'
+  | 'cancelled';
+
+export interface Supplier {
+  id: number;
+  name: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  gstin: string;
+  address: string;
+  is_active: boolean;
+  po_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseOrderLine {
+  id: number;
+  product: number;
+  product_name: string;
+  product_sku: string;
+  quantity_ordered: number;
+  quantity_received: number;
+  quantity_remaining: number;
+  unit_cost: string;
+  subtotal: string;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  po_number: string;
+  supplier: number;
+  supplier_name: string;
+  warehouse: number;
+  warehouse_name: string;
+  warehouse_code: string;
+  status: PurchaseOrderStatus;
+  order_date: string;
+  expected_delivery_date: string | null;
+  total_amount: string;
+  created_by: number;
+  created_by_username: string;
+  notes: string;
+  lines: PurchaseOrderLine[];
+  total_ordered_units: number;
+  total_received_units: number;
+  created_at: string;
+  updated_at: string;
 }
 

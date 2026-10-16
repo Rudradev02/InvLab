@@ -13,6 +13,7 @@ from audit.views import AuditLogViewSet
 from catalog.views import CategoryViewSet, ProductViewSet
 from inventory.views import StockLevelViewSet, StockMovementViewSet
 from customers.views import CustomerViewSet, PaymentViewSet
+from purchasing.views import PurchaseOrderViewSet, SupplierViewSet
 from sales.views import SaleReturnViewSet, SaleViewSet
 from transfers.views import StockTransferViewSet
 from warehouses.views import WarehouseViewSet
@@ -20,6 +21,8 @@ from warehouses.views import WarehouseViewSet
 router = DefaultRouter()
 router.register(r"users", UserViewSet, basename="user")
 router.register(r"warehouses", WarehouseViewSet, basename="warehouse")
+router.register(r"suppliers", SupplierViewSet, basename="supplier")
+router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-order")
 router.register(r"customers", CustomerViewSet, basename="customer")
 router.register(r"payments", PaymentViewSet, basename="payment")
 router.register(r"categories", CategoryViewSet, basename="category")
