@@ -79,6 +79,9 @@ def receive_stock(
 
         update_cached_product_stock(product_id)
 
+        from notifications.services import check_and_update_low_stock
+        check_and_update_low_stock(warehouse_id, product_id, stock_level.quantity, stock_level.reorder_level)
+
         return stock_level
 
 
@@ -141,6 +144,9 @@ def adjust_stock(
         )
 
         update_cached_product_stock(product_id)
+
+        from notifications.services import check_and_update_low_stock
+        check_and_update_low_stock(warehouse_id, product_id, stock_level.quantity, stock_level.reorder_level)
 
         return stock_level
 

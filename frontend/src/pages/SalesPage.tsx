@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../lib/api';
-import { Sale, StockLevel, PaginatedResponse, SaleReturn, Customer, DiscountType, PaymentMethod } from '../types';
+import { Sale, StockLevel, PaginatedResponse, SaleReturn, Customer, DiscountType, PaymentMethod, BusinessSettings, Product } from '../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { InvoiceModal } from '../components/sales/InvoiceModal';
 import { formatCurrency, formatDate } from '../lib/format';
+
+const BarcodeScannerModal = React.lazy(
+  () => import('../components/sales/BarcodeScannerModal')
+);
 import {
   ShoppingCart,
   Plus,
@@ -24,8 +29,50 @@ import {
   CreditCard,
   Banknote,
   QrCode,
+  FileText,
+  MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ProductThumbnail } from '../components/common/ProductThumbnail';
+
+const INDIAN_STATES = [
+  'Andaman and Nicobar Islands',
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chandigarh',
+  'Chhattisgarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jammu and Kashmir',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Ladakh',
+  'Lakshadweep',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Puducherry',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal',
+];
 
 interface CartLine {
   productId: number;
@@ -34,6 +81,8 @@ interface CartLine {
   unitPrice: number;
   quantity: number;
   availableStock: number;
+  gstRate: number;
+  hsnCode: string;
 }
 
 export const SalesPage: React.FC = () => {
@@ -62,6 +111,24 @@ export const SalesPage: React.FC = () => {
     address: '',
   });
 
+  // GST & Invoice state
+  const [placeOfSupply, setPlaceOfSupply] = useState<string>('Maharashtra');
+  const [customerGstin, setCustomerGstin] = useState<string>('');
+  const [invoiceModalSaleId, setInvoiceModalSaleId] = useState<number | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+
+  // Business settings query
+  const { data: bizSettings } = useQuery<BusinessSettings>({
+    queryKey: ['business-settings'],
+    queryFn: () => apiRequest<BusinessSettings>('business-settings/'),
+  });
+
+  useEffect(() => {
+    if (bizSettings?.state && !selectedCustomerId) {
+      setPlaceOfSupply(bizSettings.state);
+    }
+  }, [bizSettings, selectedCustomerId]);
+
   // Modals state
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [viewingSale, setViewingSale] = useState<Sale | null>(null);
@@ -79,6 +146,19 @@ export const SalesPage: React.FC = () => {
     queryFn: () => apiRequest<PaginatedResponse<Customer>>('customers/?page_size=100&is_active=true'),
   });
   const activeCustomers = customersData?.results || [];
+
+  const handleSelectCustomer = (custId: string) => {
+    setSelectedCustomerId(custId);
+    if (!custId) {
+      setCustomerGstin('');
+      if (bizSettings?.state) setPlaceOfSupply(bizSettings.state);
+    } else {
+      const cust = activeCustomers.find((c) => c.id.toString() === custId);
+      if (cust) {
+        if (cust.gstin) setCustomerGstin(cust.gstin);
+      }
+    }
+  };
 
   // Query stock in active warehouse
   const { data: stockData } = useQuery({
@@ -140,6 +220,8 @@ export const SalesPage: React.FC = () => {
           unitPrice: parseFloat(stockItem.product.price),
           quantity: addQuantity,
           availableStock: stockItem.quantity,
+          gstRate: parseFloat(stockItem.product.gst_rate || '0') || 0,
+          hsnCode: stockItem.product.hsn_code || '',
         },
       ]);
     }
@@ -152,6 +234,92 @@ export const SalesPage: React.FC = () => {
     setCart(cart.filter((_, i) => i !== index));
   };
 
+  const handleProductScanned = useCallback(
+    (product: Product) => {
+      const stockItem = availableStock.find((s) => s.product.id === product.id);
+      if (!stockItem || stockItem.quantity <= 0) {
+        toast.error(`"${product.name}" (${product.sku}) is out of stock in this warehouse.`);
+        return;
+      }
+
+      setCart((prev) => {
+        const existingIdx = prev.findIndex((l) => l.productId === product.id);
+        if (existingIdx > -1) {
+          const cur = prev[existingIdx];
+          if (cur.quantity + 1 > stockItem.quantity) {
+            toast.error(`Only ${stockItem.quantity} units available in stock.`);
+            return prev;
+          }
+          const updated = [...prev];
+          updated[existingIdx] = { ...cur, quantity: cur.quantity + 1 };
+          return updated;
+        }
+        return [
+          ...prev,
+          {
+            productId: stockItem.product.id,
+            productName: stockItem.product.name,
+            sku: stockItem.product.sku,
+            unitPrice: parseFloat(stockItem.product.price),
+            quantity: 1,
+            availableStock: stockItem.quantity,
+            gstRate: parseFloat(stockItem.product.gst_rate || '0') || 0,
+            hsnCode: stockItem.product.hsn_code || '',
+          },
+        ];
+      });
+    },
+    [availableStock]
+  );
+
+  // Global USB Barcode Scanner hardware listener
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isScannerOpen) return;
+
+      const target = e.target as HTMLElement;
+      const isInput =
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+
+      const now = Date.now();
+      const diff = now - lastKeyTime;
+      lastKeyTime = now;
+
+      if (e.key === 'Enter') {
+        if (buffer.length >= 3 && diff < 80) {
+          if (isInput) {
+            e.preventDefault();
+            (target as HTMLElement).blur?.();
+          }
+          const code = buffer.trim();
+          buffer = '';
+          apiRequest<Product>(`products/lookup-barcode/?barcode=${encodeURIComponent(code)}`)
+            .then((prod) => {
+              handleProductScanned(prod);
+              toast.success(`Scanned: ${prod.name}`);
+            })
+            .catch(() => {
+              toast.error(`No product found for barcode "${code}".`);
+            });
+        } else {
+          buffer = '';
+        }
+      } else if (e.key.length === 1) {
+        if (diff > 80) {
+          buffer = e.key;
+        } else {
+          buffer += e.key;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleProductScanned, isScannerOpen]);
+
   const subtotal = cart.reduce((acc, line) => acc + line.unitPrice * line.quantity, 0);
   const discountVal = parseFloat(discountValueInput) || 0;
 
@@ -161,7 +329,79 @@ export const SalesPage: React.FC = () => {
   } else if (discountType === 'amount') {
     calculatedDiscountAmount = Math.min(subtotal, Math.round(discountVal * 100) / 100);
   }
-  const netTotal = Math.max(0, subtotal - calculatedDiscountAmount);
+
+  // GST Calculation & Breakdown
+  const sellerState = (bizSettings?.state || 'Maharashtra').trim().toLowerCase();
+  const isInterstate = (placeOfSupply || '').trim().toLowerCase() !== sellerState;
+  const pricesIncludeTax = Boolean(bizSettings?.prices_include_tax);
+
+  // Proportional discount allocation
+  const allocatedDiscounts = cart.map((line) => {
+    if (subtotal <= 0 || calculatedDiscountAmount <= 0) return 0;
+    const lineSubtotal = line.unitPrice * line.quantity;
+    return Math.min(lineSubtotal, Math.round((lineSubtotal / subtotal) * calculatedDiscountAmount * 100) / 100);
+  });
+  const discDiff = Math.round((calculatedDiscountAmount - allocatedDiscounts.reduce((a, b) => a + b, 0)) * 100) / 100;
+  if (discDiff !== 0 && cart.length > 0) {
+    let maxIdx = 0;
+    cart.forEach((l, idx) => {
+      if (l.unitPrice * l.quantity > cart[maxIdx].unitPrice * cart[maxIdx].quantity) maxIdx = idx;
+    });
+    allocatedDiscounts[maxIdx] += discDiff;
+  }
+
+  let totalTaxable = 0;
+  let totalCgst = 0;
+  let totalSgst = 0;
+  let totalIgst = 0;
+  let totalTax = 0;
+
+  cart.forEach((line, idx) => {
+    const lineSubtotal = line.unitPrice * line.quantity;
+    const lineDisc = allocatedDiscounts[idx] || 0;
+    const netLine = Math.max(0, lineSubtotal - lineDisc);
+    const rate = line.gstRate || 0;
+
+    let lineTaxable = 0;
+    let lineTax = 0;
+    if (pricesIncludeTax) {
+      if (rate > 0) {
+        lineTaxable = Math.round((netLine / (1 + rate / 100)) * 100) / 100;
+        lineTax = Math.round((netLine - lineTaxable) * 100) / 100;
+      } else {
+        lineTaxable = netLine;
+        lineTax = 0;
+      }
+    } else {
+      lineTaxable = netLine;
+      if (rate > 0) {
+        lineTax = Math.round((lineTaxable * (rate / 100)) * 100) / 100;
+      } else {
+        lineTax = 0;
+      }
+    }
+
+    if (isInterstate) {
+      totalIgst += lineTax;
+    } else {
+      const cgst = Math.round((lineTax / 2) * 100) / 100;
+      const sgst = Math.round((lineTax - cgst) * 100) / 100;
+      totalCgst += cgst;
+      totalSgst += sgst;
+    }
+    totalTaxable += lineTaxable;
+    totalTax += lineTax;
+  });
+
+  totalTaxable = Math.round(totalTaxable * 100) / 100;
+  totalCgst = Math.round(totalCgst * 100) / 100;
+  totalSgst = Math.round(totalSgst * 100) / 100;
+  totalIgst = Math.round(totalIgst * 100) / 100;
+  totalTax = Math.round(totalTax * 100) / 100;
+
+  const rawGrandTotal = totalTaxable + totalTax;
+  const netTotal = Math.round(rawGrandTotal);
+  const roundOff = Math.round((netTotal - rawGrandTotal) * 100) / 100;
 
   const isStaff = user?.role === 'Staff';
   const isDiscountOverStaffLimit =
@@ -234,6 +474,8 @@ export const SalesPage: React.FC = () => {
         body: JSON.stringify({
           warehouse_id: selectedWarehouseId,
           customer_id: selectedCustomerId ? parseInt(selectedCustomerId, 10) : null,
+          place_of_supply: placeOfSupply,
+          customer_gstin: customerGstin,
           discount_type: discountType,
           discount_value: discountVal.toFixed(2),
           payment_method: paymentMethod,
@@ -252,6 +494,8 @@ export const SalesPage: React.FC = () => {
       setNotes('');
       setAmountPaidInput('');
       setSelectedCustomerId('');
+      setCustomerGstin('');
+      if (bizSettings?.state) setPlaceOfSupply(bizSettings.state);
       setDiscountType('none');
       setDiscountValueInput('');
       setPaymentMethod('cash');
@@ -401,12 +645,24 @@ export const SalesPage: React.FC = () => {
         <div className="lg:col-span-8 space-y-6">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>Select Products for Sale</span>
-                <span className="text-xs font-normal text-[#5E6B63]">
-                  Stock reflects active warehouse
-                </span>
-              </CardTitle>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base">Select Products for Sale</CardTitle>
+                  <span className="text-xs font-normal text-[#5E6B63]">
+                    Stock reflects active warehouse • USB scanners active anytime
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => setIsScannerOpen(true)}
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 border-[#173D32] text-[#173D32] hover:bg-[#E6F2EA] font-semibold"
+                >
+                  <QrCode className="w-4 h-4 text-[#173D32]" />
+                  Scan Barcode / QR
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
@@ -428,6 +684,45 @@ export const SalesPage: React.FC = () => {
                       </option>
                     ))}
                   </select>
+
+                  {/* Selected Product Visual Preview */}
+                  {(() => {
+                    const selectedItem = availableStock.find(
+                      (s) => String(s.product.id) === selectedProductId
+                    );
+                    if (!selectedItem) return null;
+                    return (
+                      <div className="flex items-center gap-2.5 p-2 bg-[#F8F8F5] border border-[#E3E1DA] rounded-md mt-1.5 animate-in fade-in duration-100">
+                        <ProductThumbnail
+                          src={selectedItem.product.thumbnail || selectedItem.product.image}
+                          alt={selectedItem.product.name}
+                          size="sm"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-[#202521] truncate">
+                            {selectedItem.product.name}
+                          </p>
+                          <div className="flex items-center gap-2 text-[11px] text-[#5E6B63] mt-0.5">
+                            <span className="font-mono text-[#173D32]">{selectedItem.product.sku}</span>
+                            <span>•</span>
+                            <span className="font-semibold text-[#202521]">
+                              {formatCurrency(selectedItem.product.price)}
+                            </span>
+                            <span>•</span>
+                            <span
+                              className={
+                                selectedItem.quantity <= selectedItem.reorder_level
+                                  ? 'text-[#B3261E] font-semibold'
+                                  : 'text-[#2F7D4F] font-semibold'
+                              }
+                            >
+                              {selectedItem.quantity} in stock
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="sm:col-span-2 space-y-1.5">
@@ -474,34 +769,45 @@ export const SalesPage: React.FC = () => {
                         </td>
                       </tr>
                     ) : (
-                      cart.map((line, idx) => (
-                        <tr key={line.productId} className="hover:bg-[#F8F8F5]/50">
-                          <td className="py-2 px-3 font-mono font-medium text-[#173D32]">
-                            {line.sku}
-                          </td>
-                          <td className="py-2 px-3 font-medium text-[#202521]">
-                            {line.productName}
-                          </td>
-                          <td className="py-2 px-3 text-right tabular-nums">
-                            {formatCurrency(line.unitPrice)}
-                          </td>
-                          <td className="py-2 px-3 text-center font-semibold">
-                            {line.quantity}
-                          </td>
-                          <td className="py-2 px-3 text-right font-bold text-[#173D32] tabular-nums">
-                            {formatCurrency(line.unitPrice * line.quantity)}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveFromCart(idx)}
-                              className="text-red-500 hover:text-red-700 p-1"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      cart.map((line, idx) => {
+                        const stockItem = availableStock.find((s) => s.product.id === line.productId);
+                        const thumb = stockItem?.product.thumbnail || stockItem?.product.image;
+                        return (
+                          <tr key={line.productId} className="hover:bg-[#F8F8F5]/50">
+                            <td className="py-2.5 px-3 font-mono font-medium text-[#173D32] whitespace-nowrap">
+                              {line.sku}
+                            </td>
+                            <td className="py-2.5 px-3 font-medium text-[#202521]">
+                              <div className="flex items-center gap-2">
+                                <ProductThumbnail
+                                  src={thumb}
+                                  alt={line.productName}
+                                  size="xs"
+                                />
+                                <span className="truncate max-w-[200px] sm:max-w-xs">{line.productName}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right tabular-nums">
+                              {formatCurrency(line.unitPrice)}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-semibold">
+                              {line.quantity}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-[#173D32] tabular-nums">
+                              {formatCurrency(line.unitPrice * line.quantity)}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFromCart(idx)}
+                                className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -534,7 +840,7 @@ export const SalesPage: React.FC = () => {
                 </div>
                 <select
                   value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                  onChange={(e) => handleSelectCustomer(e.target.value)}
                   className="w-full h-10 px-3 rounded-md border border-[#E3E1DA] bg-white text-xs text-[#202521] focus:outline-none focus:ring-1 focus:ring-[#173D32]"
                 >
                   <option value="">Walk-in Customer (No Udhaar)</option>
@@ -547,6 +853,43 @@ export const SalesPage: React.FC = () => {
                     );
                   })}
                 </select>
+              </div>
+
+              {/* Place of Supply & GSTIN Card */}
+              <div className="space-y-2 p-3 rounded-lg border border-[#E3E1DA] bg-white">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-[#202521] uppercase flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-[#173D32]" />
+                    Place of Supply (GST)
+                  </label>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      isInterstate ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    {isInterstate ? 'Inter-State (IGST)' : 'Intra-State (CGST+SGST)'}
+                  </span>
+                </div>
+                <select
+                  value={placeOfSupply}
+                  onChange={(e) => setPlaceOfSupply(e.target.value)}
+                  className="w-full h-9 px-2.5 rounded-md border border-[#E3E1DA] bg-white text-xs text-[#202521] focus:outline-none focus:ring-1 focus:ring-[#173D32]"
+                >
+                  {INDIAN_STATES.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+                <div>
+                  <input
+                    type="text"
+                    value={customerGstin}
+                    onChange={(e) => setCustomerGstin(e.target.value.toUpperCase())}
+                    placeholder="Customer GSTIN (Optional B2B)"
+                    className="w-full h-8 px-2.5 rounded-md border border-[#E3E1DA] bg-[#FBFBFA] text-xs font-mono text-[#202521] placeholder:text-[#5E6B63] focus:outline-none focus:ring-1 focus:ring-[#173D32]"
+                  />
+                </div>
               </div>
 
               {/* Discount Section */}
@@ -746,6 +1089,41 @@ export const SalesPage: React.FC = () => {
                   <div className="flex justify-between text-xs text-[#2F7D4F] font-semibold">
                     <span>Discount ({discountType === 'percent' ? `${discountVal}%` : 'Flat'}):</span>
                     <span className="tabular-nums">-{formatCurrency(calculatedDiscountAmount)}</span>
+                  </div>
+                )}
+                {totalTaxable > 0 && (
+                  <div className="flex justify-between text-xs text-[#5E6B63]">
+                    <span>Taxable Value:</span>
+                    <span className="font-medium text-[#202521] tabular-nums">{formatCurrency(totalTaxable)}</span>
+                  </div>
+                )}
+                {totalTax > 0 && (
+                  <>
+                    {isInterstate ? (
+                      <div className="flex justify-between text-xs text-[#5E6B63]">
+                        <span>IGST:</span>
+                        <span className="font-medium text-[#202521] tabular-nums">{formatCurrency(totalIgst)}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-xs text-[#5E6B63]">
+                          <span>CGST:</span>
+                          <span className="font-medium text-[#202521] tabular-nums">{formatCurrency(totalCgst)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-[#5E6B63]">
+                          <span>SGST:</span>
+                          <span className="font-medium text-[#202521] tabular-nums">{formatCurrency(totalSgst)}</span>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                {roundOff !== 0 && (
+                  <div className="flex justify-between text-xs text-[#5E6B63]">
+                    <span>Round Off:</span>
+                    <span className="font-medium text-[#202521] tabular-nums">
+                      {roundOff > 0 ? `+${formatCurrency(roundOff)}` : formatCurrency(roundOff)}
+                    </span>
                   </div>
                 )}
                 <div className="border-t border-[#E3E1DA] pt-2 flex justify-between items-baseline">
@@ -977,6 +1355,16 @@ export const SalesPage: React.FC = () => {
                           <Button
                             variant="ghost"
                             size="sm"
+                            title="GST Tax Invoice"
+                            onClick={() => setInvoiceModalSaleId(sale.id)}
+                            className="text-[#173D32] hover:bg-[#E6F2EA] p-1.5 h-8"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             title="Print Receipt"
                             onClick={() => setCompletedSale(sale)}
                             className="text-[#5E6B63] hover:text-[#202521] hover:bg-[#E3E1DA]/50 p-1.5 h-8"
@@ -1136,6 +1524,14 @@ export const SalesPage: React.FC = () => {
                 </Button>
 
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setInvoiceModalSaleId(viewingSale.id)}
+                    className="gap-1.5 text-[#173D32] hover:bg-[#E6F2EA]"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> GST Invoice
+                  </Button>
+
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -1458,7 +1854,13 @@ export const SalesPage: React.FC = () => {
                 )}
               </div>
 
-              <div className="pt-4 flex gap-2">
+              <div className="pt-4 flex flex-col sm:flex-row gap-2">
+                <Button
+                  onClick={() => setInvoiceModalSaleId(completedSale.id)}
+                  className="w-full gap-2 bg-[#173D32] text-white hover:bg-[#122e26]"
+                >
+                  <FileText className="w-4 h-4" /> View GST Invoice
+                </Button>
                 <Button
                   onClick={() => window.print()}
                   className="w-full gap-2"
@@ -1466,7 +1868,7 @@ export const SalesPage: React.FC = () => {
                 >
                   <Printer className="w-4 h-4" /> Print Receipt
                 </Button>
-                <Button onClick={() => setCompletedSale(null)} className="w-full">
+                <Button onClick={() => setCompletedSale(null)} variant="outline">
                   Close
                 </Button>
               </div>
@@ -1563,6 +1965,25 @@ export const SalesPage: React.FC = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* GST Tax Invoice Modal */}
+      <InvoiceModal
+        saleId={invoiceModalSaleId}
+        isOpen={Boolean(invoiceModalSaleId)}
+        onClose={() => setInvoiceModalSaleId(null)}
+      />
+
+      {/* Barcode & QR Scanner Modal (Lazy Loaded) */}
+      <React.Suspense fallback={null}>
+        {isScannerOpen && (
+          <BarcodeScannerModal
+            isOpen={isScannerOpen}
+            onClose={() => setIsScannerOpen(false)}
+            onProductScanned={handleProductScanned}
+            availableStock={availableStock}
+          />
+        )}
+      </React.Suspense>
     </div>
   );
 };

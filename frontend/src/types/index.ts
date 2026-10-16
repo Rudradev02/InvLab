@@ -141,6 +141,12 @@ export interface Product {
   category_name: string;
   description: string;
   price: string;
+  cost_price?: string;
+  gst_rate?: string;
+  hsn_code?: string;
+  barcode?: string | null;
+  image?: string | null;
+  thumbnail?: string | null;
   default_reorder_level: number;
   is_active: boolean;
   created_at: string;
@@ -225,9 +231,43 @@ export interface SaleLine {
   product_name: string;
   quantity: number;
   unit_price: string;
+  unit_cost?: string | null;
   subtotal: string;
+  gst_rate?: string;
+  hsn_code?: string;
+  taxable_amount?: string;
+  cgst_amount?: string;
+  sgst_amount?: string;
+  igst_amount?: string;
+  tax_amount?: string;
   returned_quantity?: number;
   returnable_quantity?: number;
+}
+
+export interface DashboardKPIs {
+  total_revenue: string;
+  gross_profit: string;
+  profit_margin_pct: number;
+  unknown_cost_count: number;
+  sales_count: number;
+  total_units: number;
+  low_stock_count: number;
+  total_receivables: string;
+  pending_transfers: number;
+}
+
+export interface DashboardDailyChartPoint {
+  date: string;
+  revenue: number;
+  profit: number;
+  sales_count: number;
+}
+
+export interface DashboardData {
+  range: string;
+  warehouse_id?: number | null;
+  kpis: DashboardKPIs;
+  daily_chart: DashboardDailyChartPoint[];
 }
 
 export type ReturnStatus = 'not_returned' | 'partially_returned' | 'fully_returned';
@@ -238,6 +278,7 @@ export type PaymentMethod = 'cash' | 'upi' | 'card' | 'credit' | 'unknown';
 export interface Sale {
   id: number;
   sale_number: string;
+  invoice_number?: string;
   warehouse: number;
   warehouse_name: string;
   warehouse_code: string;
@@ -246,10 +287,19 @@ export interface Sale {
   customer?: number | null;
   customer_name?: string | null;
   customer_phone?: string | null;
+  customer_gstin?: string;
+  place_of_supply?: string;
+  is_interstate?: boolean;
   subtotal: string;
   discount_type: DiscountType;
   discount_value: string;
   discount_amount: string;
+  taxable_amount?: string;
+  cgst_amount?: string;
+  sgst_amount?: string;
+  igst_amount?: string;
+  total_tax_amount?: string;
+  round_off_amount?: string;
   total_amount: string;
   amount_paid: string;
   balance_due: string;
@@ -379,4 +429,183 @@ export interface ReportData {
   columns: ReportColumn[];
   rows: Record<string, any>[];
 }
+
+export type PurchaseOrderStatus =
+  | 'draft'
+  | 'ordered'
+  | 'partially_received'
+  | 'received'
+  | 'cancelled';
+
+export interface Supplier {
+  id: number;
+  name: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  gstin: string;
+  address: string;
+  is_active: boolean;
+  po_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseOrderLine {
+  id: number;
+  product: number;
+  product_name: string;
+  product_sku: string;
+  quantity_ordered: number;
+  quantity_received: number;
+  quantity_remaining: number;
+  unit_cost: string;
+  subtotal: string;
+}
+
+export interface PurchaseOrder {
+  id: number;
+  po_number: string;
+  supplier: number;
+  supplier_name: string;
+  warehouse: number;
+  warehouse_name: string;
+  warehouse_code: string;
+  status: PurchaseOrderStatus;
+  order_date: string;
+  expected_delivery_date: string | null;
+  total_amount: string;
+  created_by: number;
+  created_by_username: string;
+  notes: string;
+  lines: PurchaseOrderLine[];
+  total_ordered_units: number;
+  total_received_units: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BusinessSettings {
+  id: number;
+  name: string;
+  address_line1: string;
+  address_line2: string;
+  city: string;
+  state: string;
+  pincode: string;
+  phone: string;
+  email: string;
+  gstin: string;
+  invoice_prefix: string;
+  prices_include_tax: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvoiceParty {
+  name: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  phone?: string;
+  email?: string;
+  gstin?: string;
+  warehouse_name?: string;
+  warehouse_code?: string;
+  customer_id?: number | null;
+  address?: string;
+  place_of_supply?: string;
+}
+
+export interface InvoiceItem {
+  id: number;
+  product_id: number;
+  product_name: string;
+  product_sku: string;
+  hsn_code: string;
+  quantity: number;
+  unit_price: string;
+  subtotal: string;
+  gst_rate: string;
+  taxable_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  tax_amount: string;
+  total_amount: string;
+}
+
+export interface InvoiceHsnSummary {
+  hsn_code: string;
+  gst_rate: string;
+  taxable_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  tax_amount: string;
+}
+
+export interface InvoiceFinancials {
+  subtotal: string;
+  discount_type: DiscountType;
+  discount_value: string;
+  discount_amount: string;
+  taxable_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  total_tax_amount: string;
+  round_off_amount: string;
+  total_amount: string;
+  amount_paid: string;
+  balance_due: string;
+  payment_method: PaymentMethod;
+  amount_in_words: string;
+}
+
+export interface InvoiceDetails {
+  sale_id: number;
+  sale_number: string;
+  invoice_number: string;
+  created_at: string;
+  seller: InvoiceParty;
+  buyer: InvoiceParty;
+  is_interstate: boolean;
+  prices_include_tax: boolean;
+  items: InvoiceItem[];
+  hsn_summary: InvoiceHsnSummary[];
+  financials: InvoiceFinancials;
+}
+
+export interface NotificationSettings {
+  id: number;
+  enable_low_stock_alerts: boolean;
+  enable_daily_summary: boolean;
+  additional_recipients: string;
+  additional_recipients_list: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LowStockAlertItem {
+  product_id: number;
+  product_name: string;
+  sku: string;
+  barcode: string | null;
+  warehouse_id: number;
+  warehouse_name: string;
+  warehouse_code: string;
+  quantity: number;
+  reorder_level: number;
+  is_out_of_stock: boolean;
+  last_alerted_at: string | null;
+}
+
+export interface LowStockAlertsResponse {
+  count: number;
+  results: LowStockAlertItem[];
+}
+
 

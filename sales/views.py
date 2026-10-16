@@ -1,9 +1,14 @@
+from decimal import Decimal
+
 from django.db.models import Q
+from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
+from core.models import BusinessSettings
+from core.num_to_words import amount_to_words_inr
 from core.permissions import (
     ROLE_ADMIN,
     ROLE_STAFF,
@@ -13,6 +18,7 @@ from core.permissions import (
 )
 from core.scoping import WarehouseScopeMixin
 
+from .invoice_pdf import generate_invoice_pdf
 from .models import Sale, SaleReturn
 from .serializers import (
     CreateReturnRequestSerializer,
@@ -127,9 +133,133 @@ class SaleViewSet(WarehouseScopeMixin, viewsets.ModelViewSet):
             discount_type=data.get("discount_type", "none"),
             discount_value=data.get("discount_value", 0),
             payment_method=data.get("payment_method", "cash"),
+            place_of_supply=data.get("place_of_supply"),
+            customer_gstin=data.get("customer_gstin"),
         )
 
         return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], permission_classes=[IsStaff])
+    def invoice(self, request, pk=None):
+        sale = self.get_object()
+        biz_settings = BusinessSettings.get_settings()
+        customer = sale.customer
+        is_interstate = sale.is_interstate
+
+        items = []
+        for line in sale.lines.all():
+            items.append({
+                "id": line.id,
+                "product_id": line.product_id,
+                "product_name": line.product.name,
+                "product_sku": line.product.sku,
+                "hsn_code": line.hsn_code or "",
+                "quantity": line.quantity,
+                "unit_price": str(line.unit_price),
+                "subtotal": str(line.subtotal),
+                "gst_rate": str(line.gst_rate),
+                "taxable_amount": str(line.taxable_amount),
+                "cgst_amount": str(line.cgst_amount),
+                "sgst_amount": str(line.sgst_amount),
+                "igst_amount": str(line.igst_amount),
+                "tax_amount": str(line.tax_amount),
+                "total_amount": str((line.taxable_amount + line.tax_amount).quantize(Decimal("0.01"))),
+            })
+
+        # Aggregated HSN summary
+        hsn_map = {}
+        for line in sale.lines.all():
+            hsn = line.hsn_code or "General"
+            rate = str(line.gst_rate)
+            key = f"{hsn}_{rate}"
+            if key not in hsn_map:
+                hsn_map[key] = {
+                    "hsn_code": hsn,
+                    "gst_rate": rate,
+                    "taxable_amount": Decimal("0.00"),
+                    "cgst_amount": Decimal("0.00"),
+                    "sgst_amount": Decimal("0.00"),
+                    "igst_amount": Decimal("0.00"),
+                    "tax_amount": Decimal("0.00"),
+                }
+            hsn_map[key]["taxable_amount"] += line.taxable_amount
+            hsn_map[key]["cgst_amount"] += line.cgst_amount
+            hsn_map[key]["sgst_amount"] += line.sgst_amount
+            hsn_map[key]["igst_amount"] += line.igst_amount
+            hsn_map[key]["tax_amount"] += line.tax_amount
+
+        hsn_summary = [
+            {
+                "hsn_code": v["hsn_code"],
+                "gst_rate": v["gst_rate"],
+                "taxable_amount": str(v["taxable_amount"]),
+                "cgst_amount": str(v["cgst_amount"]),
+                "sgst_amount": str(v["sgst_amount"]),
+                "igst_amount": str(v["igst_amount"]),
+                "tax_amount": str(v["tax_amount"]),
+            }
+            for v in hsn_map.values()
+        ]
+
+        data = {
+            "sale_id": sale.id,
+            "sale_number": sale.sale_number,
+            "invoice_number": sale.invoice_number or sale.sale_number,
+            "created_at": sale.created_at.isoformat(),
+            "seller": {
+                "name": biz_settings.name,
+                "address_line1": biz_settings.address_line1,
+                "address_line2": biz_settings.address_line2,
+                "city": biz_settings.city,
+                "state": biz_settings.state,
+                "pincode": biz_settings.pincode,
+                "phone": biz_settings.phone,
+                "email": biz_settings.email,
+                "gstin": biz_settings.gstin,
+                "warehouse_name": sale.warehouse.name,
+                "warehouse_code": sale.warehouse.code,
+            },
+            "buyer": {
+                "customer_id": customer.id if customer else None,
+                "name": customer.name if customer else "Walk-in Retail Customer",
+                "phone": customer.phone if customer else "",
+                "email": customer.email if customer else "",
+                "address": customer.address if customer else "",
+                "gstin": sale.customer_gstin or (customer.gstin if customer else ""),
+                "place_of_supply": sale.place_of_supply or biz_settings.state,
+            },
+            "is_interstate": is_interstate,
+            "prices_include_tax": biz_settings.prices_include_tax,
+            "items": items,
+            "hsn_summary": hsn_summary,
+            "financials": {
+                "subtotal": str(sale.subtotal),
+                "discount_type": sale.discount_type,
+                "discount_value": str(sale.discount_value),
+                "discount_amount": str(sale.discount_amount),
+                "taxable_amount": str(sale.taxable_amount),
+                "cgst_amount": str(sale.cgst_amount),
+                "sgst_amount": str(sale.sgst_amount),
+                "igst_amount": str(sale.igst_amount),
+                "total_tax_amount": str(sale.total_tax_amount),
+                "round_off_amount": str(sale.round_off_amount),
+                "total_amount": str(sale.total_amount),
+                "amount_paid": str(sale.amount_paid),
+                "balance_due": str(sale.balance_due),
+                "payment_method": sale.payment_method,
+                "amount_in_words": amount_to_words_inr(sale.total_amount),
+            },
+        }
+        return Response(data)
+
+    @action(detail=True, methods=["get"], url_path="invoice/pdf", permission_classes=[IsStaff])
+    def invoice_pdf(self, request, pk=None):
+        sale = self.get_object()
+        pdf_bytes = generate_invoice_pdf(sale)
+        filename = f"invoice-{(sale.invoice_number or sale.sale_number).replace('/', '_')}.pdf"
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
     @action(detail=True, methods=["post"], permission_classes=[IsWarehouseManager])
     def return_items(self, request, pk=None):

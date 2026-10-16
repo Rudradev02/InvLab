@@ -108,6 +108,9 @@ def create_transfer(
                     balance_after=stock_level.quantity,
                 )
 
+                from notifications.services import check_and_update_low_stock
+                check_and_update_low_stock(from_wh.id, product.id, stock_level.quantity, stock_level.reorder_level)
+
             StockTransferLine.objects.create(
                 transfer=transfer,
                 product=product,
@@ -283,6 +286,9 @@ def receive_transfer(
                     reference=transfer.transfer_number,
                     balance_after=dest_stock.quantity,
                 )
+
+                from notifications.services import check_and_update_low_stock
+                check_and_update_low_stock(transfer.to_warehouse_id, line.product_id, dest_stock.quantity, dest_stock.reorder_level)
 
         transfer.status = "received"
         transfer.received_by = user

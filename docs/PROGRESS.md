@@ -19,12 +19,12 @@ Suggested Build Order: 22, 21, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 | 9 | Customers and credit balance | done | `f9ca344` | Customer & Payment models, udhaar credit balances, FIFO oldest-sales allocation, CustomersPage UI, SalesPage customer selector & udhaar preview, Dashboard receivables KPI |
 | 10 | Discounts and payment methods | done | `5544902` | Subtotal, flat/percent discount, staff 10% limit check, payment methods (Cash, UPI, Card, Credit/Udhaar), receipt breakdown & filters |
 | 11 | Reports with exports | done | `a5aa808` | Report registry, 4 reports (sales summary, sales by product, stock list, low stock), CSV stream with injection safety, openpyxl Excel, ReportLab PDF, Asia/Kolkata boundaries, ReportsPage UI |
-| 12 | Suppliers and purchase orders | todo | - | Purchase orders, supplier catalog, receiving |
-| 13 | Profit tracking | todo | - | Cost price snapshots, gross margin & profit metrics |
-| 14 | GST-ready invoices | todo | - | CGST, SGST, IGST tax invoice calculations & numbering |
-| 15 | Barcode and QR scanning | todo | - | Product barcode lookup, scanner UI |
-| 16 | Low-stock emails and daily summary | todo | - | Email notifications on reorder threshold |
-| 17 | Product images | todo | - | Product image upload & thumbnail (Ask first on storage) |
+| 12 | Suppliers and purchase orders | done | `d48968a` | Suppliers directory, PurchaseOrder lifecycle (draft/ordered/partially_received/received/cancelled), partial receipts with over-receiving guards, weighted-average cost accounting, PurchasingPage UI |
+| 13 | Profit tracking | done | `37fac7e` | SaleLine.unit_cost snapshot, DashboardView API (gross profit, margin %, daily trends, unknown cost count), margin badge in table, live margin preview in product modal, Profit & Margin report in registry |
+| 14 | GST-ready invoices | done | `e825757` | BusinessSettings, CGST/SGST/IGST breakdown, locked sequential FY numbering, ReportLab PDF with canvas page numbering & HSN summary, words in Lakh/Crore, SettingsPage & InvoiceModal UI |
+| 15 | Barcode and QR scanning | done | `eb24433` | Product.barcode unique null, lookup endpoint, lazy BarcodeScannerModal (camera BarcodeDetector, USB keyboard wedge, manual), Inventory modal barcode |
+| 16 | Low-stock emails and daily summary | done | `6584bfe` | NotificationSettings, LowStockAlertState anti-spam & restock reset, on_commit email, send_daily_summary command, TopBar alert bell popover, SettingsPage UI |
+| 17 | Product images | done | `e97267b` | Pillow validation, 240x240 WebP thumbnails, Cloudinary/local storage fallback, drag-and-drop upload with preview, table & sales thumbnail cards |
 | 18 | Batch and expiry tracking | todo | - | FEFO batch deduction & expiry alerts |
 | 19 | Dark mode | todo | - | Full dark token palette & theme switcher |
 | 20 | Global search (Ctrl+K) | todo | - | Command palette for navigation & entities |

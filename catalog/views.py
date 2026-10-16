@@ -1,5 +1,8 @@
+from django.db import models
 from rest_framework import filters, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from core.permissions import (
@@ -57,8 +60,9 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.filter(is_active=True).select_related("category")
     serializer_class = ProductSerializer
     permission_classes = [IsStaff]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["name", "sku", "category__name"]
+    search_fields = ["name", "sku", "barcode", "category__name"]
     ordering_fields = ["name", "price", "created_at"]
     ordering = ["name"]
 
@@ -67,7 +71,32 @@ class ProductViewSet(viewsets.ModelViewSet):
         category_id = self.request.query_params.get("category")
         if category_id:
             qs = qs.filter(category_id=category_id)
+        barcode = self.request.query_params.get("barcode")
+        if barcode:
+            qs = qs.filter(barcode__iexact=barcode.strip())
         return qs
+
+    @action(detail=False, methods=["get"], url_path="lookup-barcode")
+    def lookup_barcode(self, request):
+        barcode = request.query_params.get("barcode", "").strip()
+        if not barcode:
+            return Response(
+                {"detail": "Barcode query parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        product = (
+            Product.objects.filter(is_active=True)
+            .filter(models.Q(barcode__iexact=barcode) | models.Q(sku__iexact=barcode))
+            .select_related("category")
+            .first()
+        )
+        if not product:
+            return Response(
+                {"detail": f"No active product found for barcode '{barcode}'."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = self.get_serializer(product)
+        return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
         role = get_user_role(request.user)

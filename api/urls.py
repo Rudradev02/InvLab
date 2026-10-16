@@ -13,6 +13,7 @@ from audit.views import AuditLogViewSet
 from catalog.views import CategoryViewSet, ProductViewSet
 from inventory.views import StockLevelViewSet, StockMovementViewSet
 from customers.views import CustomerViewSet, PaymentViewSet
+from purchasing.views import PurchaseOrderViewSet, SupplierViewSet
 from sales.views import SaleReturnViewSet, SaleViewSet
 from transfers.views import StockTransferViewSet
 from warehouses.views import WarehouseViewSet
@@ -20,6 +21,8 @@ from warehouses.views import WarehouseViewSet
 router = DefaultRouter()
 router.register(r"users", UserViewSet, basename="user")
 router.register(r"warehouses", WarehouseViewSet, basename="warehouse")
+router.register(r"suppliers", SupplierViewSet, basename="supplier")
+router.register(r"purchase-orders", PurchaseOrderViewSet, basename="purchase-order")
 router.register(r"customers", CustomerViewSet, basename="customer")
 router.register(r"payments", PaymentViewSet, basename="payment")
 router.register(r"categories", CategoryViewSet, basename="category")
@@ -31,6 +34,10 @@ router.register(r"returns", SaleReturnViewSet, basename="return")
 router.register(r"transfers", StockTransferViewSet, basename="transfer")
 router.register(r"audit", AuditLogViewSet, basename="audit")
 
+from api.dashboard_views import DashboardView
+from core.views import BusinessSettingsView
+from notifications.views import LowStockAlertsView, NotificationSettingsView
+
 urlpatterns = [
     # Auth endpoints
     path("auth/csrf/", CsrfView.as_view(), name="auth-csrf"),
@@ -38,6 +45,13 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="auth-logout"),
     path("auth/me/", MeView.as_view(), name="auth-me"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
+    # Dashboard endpoint
+    path("dashboard/", DashboardView.as_view(), name="dashboard"),
+    # Business & GST Settings
+    path("business-settings/", BusinessSettingsView.as_view(), name="business-settings"),
+    # Notifications & Alert Settings
+    path("notification-settings/", NotificationSettingsView.as_view(), name="notification-settings"),
+    path("notifications/low-stock/", LowStockAlertsView.as_view(), name="notifications-low-stock"),
     # Reports endpoints
     path("reports/", include("reports.urls")),
     # Router endpoints under /api/v1/

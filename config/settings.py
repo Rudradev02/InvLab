@@ -40,6 +40,8 @@ INSTALLED_APPS = [
     # Third-party
     "rest_framework",
     "drf_spectacular",
+    "cloudinary_storage",
+    "cloudinary",
     # Domain & Core apps
     "core.apps.CoreConfig",
     "accounts.apps.AccountsConfig",
@@ -49,8 +51,10 @@ INSTALLED_APPS = [
     "sales.apps.SalesConfig",
     "customers.apps.CustomersConfig",
     "transfers.apps.TransfersConfig",
+    "purchasing.apps.PurchasingConfig",
     "reports.apps.ReportsConfig",
     "audit.apps.AuditConfig",
+    "notifications.apps.NotificationsConfig",
     "api.apps.ApiConfig",
 ]
 
@@ -130,9 +134,39 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 dist_path = BASE_DIR / "frontend" / "dist"
 STATICFILES_DIRS = [dist_path] if dist_path.exists() else []
 
+# Media files & Storage (Cloudinary with local FileSystemStorage fallback)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME", "").strip()
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY", "").strip()
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET", "").strip()
+CLOUDINARY_URL = os.getenv("CLOUDINARY_URL", "").strip()
+
+# Only enable Cloudinary if configured with non-placeholder credentials
+has_valid_cloudinary_url = bool(
+    CLOUDINARY_URL and "<" not in CLOUDINARY_URL and "your_api_secret" not in CLOUDINARY_URL
+)
+has_valid_cloudinary_keys = bool(
+    CLOUDINARY_CLOUD_NAME and CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET
+)
+USE_CLOUDINARY = has_valid_cloudinary_url or has_valid_cloudinary_keys
+
+if USE_CLOUDINARY:
+    CLOUDINARY_STORAGE = {
+        "CLOUD_NAME": CLOUDINARY_CLOUD_NAME,
+        "API_KEY": CLOUDINARY_API_KEY,
+        "API_SECRET": CLOUDINARY_API_SECRET,
+    }
+    DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+    default_storage_backend = "cloudinary_storage.storage.MediaCloudinaryStorage"
+else:
+    DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
+    default_storage_backend = "django.core.files.storage.FileSystemStorage"
+
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": default_storage_backend,
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
@@ -187,3 +221,17 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
 }
+
+# Email Configuration (Console email in dev, SMTP in prod, no secrets in repo)
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+    if DEBUG
+    else "django.core.mail.backends.smtp.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "InvLab Alerts <alerts@invlab.local>")

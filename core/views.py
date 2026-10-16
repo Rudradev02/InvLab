@@ -43,3 +43,33 @@ def spa_index_view(request):
         "<html><body><h1>InvLab Backend</h1><p>Frontend SPA bundle not yet built. Run <code>npm run build</code> in frontend directory.</p></body></html>",
         content_type="text/html",
     )
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
+from core.permissions import IsStaff, get_user_role, ROLE_ADMIN
+from .models import BusinessSettings
+from .serializers import BusinessSettingsSerializer
+
+
+class BusinessSettingsView(APIView):
+    permission_classes = [IsStaff]
+
+    def get(self, request):
+        settings = BusinessSettings.get_settings()
+        serializer = BusinessSettingsSerializer(settings)
+        return Response(serializer.data)
+
+    def put(self, request):
+        if get_user_role(request.user) != ROLE_ADMIN:
+            raise PermissionDenied("Only Admin can update business settings.")
+        settings = BusinessSettings.get_settings()
+        serializer = BusinessSettingsSerializer(settings, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def patch(self, request):
+        return self.put(request)
+

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../lib/api';
-import { StockLevel, Product, StockMovement, PaginatedResponse } from '../types';
+import { StockLevel, Product, Category, StockMovement, PaginatedResponse } from '../types';
 import { Card, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -21,8 +21,14 @@ import {
   ArrowUpRight,
   Plus,
   Edit,
+  PackagePlus,
+  QrCode,
+  UploadCloud,
+  X,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ProductThumbnail } from '../components/common/ProductThumbnail';
 
 export const InventoryPage: React.FC = () => {
   const { user, selectedWarehouseId } = useAuth();
@@ -65,6 +71,148 @@ export const InventoryPage: React.FC = () => {
   const { data: productsData } = useQuery({
     queryKey: ['catalog-products'],
     queryFn: () => apiRequest<PaginatedResponse<Product>>('products/'),
+  });
+
+  // Query categories for product modal
+  const { data: categoriesData } = useQuery({
+    queryKey: ['catalog-categories'],
+    queryFn: () => apiRequest<PaginatedResponse<Category>>('categories/'),
+  });
+
+  const categories = categoriesData?.results || [];
+
+  // Product CRUD modal state
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productForm, setProductForm] = useState({
+    sku: '',
+    name: '',
+    category: '',
+    price: '',
+    cost_price: '',
+    gst_rate: '18.00',
+    hsn_code: '8517',
+    barcode: '',
+    default_reorder_level: 5,
+    description: '',
+  });
+
+  // Product Image State
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [removeExistingImage, setRemoveExistingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleImageSelected = (file: File) => {
+    setImageError(null);
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setImageError('Unsupported image format. Allowed formats: JPEG, PNG, and WebP.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setImageError('Image file size exceeds the 2 MB limit.');
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setRemoveExistingImage(false);
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setRemoveExistingImage(true);
+    setImageError(null);
+  };
+
+  const handleOpenAddProduct = () => {
+    setEditingProduct(null);
+    setProductForm({
+      sku: '',
+      name: '',
+      category: categories.length > 0 ? categories[0].id.toString() : '',
+      price: '',
+      cost_price: '',
+      gst_rate: '18.00',
+      hsn_code: '8517',
+      barcode: '',
+      default_reorder_level: 5,
+      description: '',
+    });
+    setImageFile(null);
+    setImagePreview(null);
+    setRemoveExistingImage(false);
+    setImageError(null);
+    setIsProductModalOpen(true);
+  };
+
+  const handleOpenEditProduct = (prod: Product) => {
+    setEditingProduct(prod);
+    setProductForm({
+      sku: prod.sku,
+      name: prod.name,
+      category: prod.category.toString(),
+      price: prod.price,
+      cost_price: prod.cost_price || '0.00',
+      gst_rate: prod.gst_rate || '18.00',
+      hsn_code: prod.hsn_code || '',
+      barcode: prod.barcode || '',
+      default_reorder_level: prod.default_reorder_level || 5,
+      description: prod.description || '',
+    });
+    setImageFile(null);
+    setRemoveExistingImage(false);
+    setImageError(null);
+    setImagePreview(prod.thumbnail || prod.image || null);
+    setIsProductModalOpen(true);
+  };
+
+  const productMutation = useMutation({
+    mutationFn: () => {
+      const formData = new FormData();
+      formData.append('sku', productForm.sku);
+      formData.append('name', productForm.name);
+      formData.append('category', productForm.category);
+      formData.append('price', productForm.price);
+      formData.append('cost_price', productForm.cost_price || '0.00');
+      formData.append('gst_rate', productForm.gst_rate || '0.00');
+      formData.append('hsn_code', productForm.hsn_code || '');
+      if (productForm.barcode?.trim()) {
+        formData.append('barcode', productForm.barcode.trim());
+      } else {
+        formData.append('barcode', '');
+      }
+      formData.append('default_reorder_level', String(productForm.default_reorder_level));
+      formData.append('description', productForm.description || '');
+
+      if (imageFile) {
+        formData.append('image', imageFile);
+      } else if (removeExistingImage) {
+        formData.append('image', '');
+      }
+
+      if (editingProduct) {
+        return apiRequest<Product>(`products/${editingProduct.id}/`, {
+          method: 'PATCH',
+          body: formData,
+        });
+      }
+      return apiRequest<Product>('products/', {
+        method: 'POST',
+        body: formData,
+      });
+    },
+    onSuccess: (p) => {
+      toast.success(editingProduct ? `Product ${p.name} updated!` : `Product ${p.name} created!`);
+      setIsProductModalOpen(false);
+      setEditingProduct(null);
+      queryClient.invalidateQueries({ queryKey: ['catalog-products'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-inventory'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to save product.');
+    },
   });
 
   // Query product ledger when modal is opened on ledger tab
@@ -236,6 +384,16 @@ export const InventoryPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {canManageStock && (
+            <Button
+              variant="outline"
+              onClick={handleOpenAddProduct}
+              className="gap-2 cursor-pointer bg-white border-[#E3E1DA] text-[#202521] hover:bg-[#F8F8F5]"
+            >
+              <PackagePlus className="w-4 h-4 text-[#173D32]" /> New Catalog SKU
+            </Button>
+          )}
+
           {/* Add Product to Warehouse Modal (Admin and Manager) */}
           {canManageStock && (
             <Dialog open={isAddProductOpen} onOpenChange={setIsAddProductOpen}>
@@ -522,8 +680,7 @@ export const InventoryPage: React.FC = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-[#F1F1EC] text-[#5E6B63] border-b border-[#E3E1DA]">
-                  <th className="py-3 px-5 font-semibold">SKU</th>
-                  <th className="py-3 px-5 font-semibold">Product Name</th>
+                  <th className="py-3 px-5 font-semibold">Product</th>
                   <th className="py-3 px-5 font-semibold">Warehouse</th>
                   <th className="py-3 px-5 font-semibold">Unit Price</th>
                   <th className="py-3 px-5 font-semibold">Reorder Level</th>
@@ -541,19 +698,62 @@ export const InventoryPage: React.FC = () => {
                     }}
                     className="hover:bg-[#F8F8F5]/80 transition-colors cursor-pointer group"
                   >
-                    <td className="py-3.5 px-5 font-mono font-semibold text-[#173D32]">
-                      {item.product.sku}
-                    </td>
-                    <td className="py-3.5 px-5 font-semibold text-[#202521]">
-                      {item.product.name}
+                    <td className="py-3.5 px-5">
+                      <div className="flex items-center gap-3">
+                        <ProductThumbnail
+                          src={item.product.thumbnail || item.product.image}
+                          alt={item.product.name}
+                          size="md"
+                        />
+                        <div className="min-w-0">
+                          <div className="font-semibold text-[#202521] text-xs leading-snug truncate max-w-xs sm:max-w-sm">
+                            {item.product.name}
+                          </div>
+                          <div className="font-mono text-[11px] font-medium text-[#173D32] mt-0.5">
+                            {item.product.sku}
+                          </div>
+                          {item.product.barcode && (
+                            <div className="text-[10px] text-[#5E6B63] flex items-center gap-1 font-normal font-sans mt-0.5">
+                              <QrCode className="w-2.5 h-2.5 text-[#173D32]" />
+                              <span className="font-mono">{item.product.barcode}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="py-3.5 px-5 text-[#5E6B63]">
                       <span className="px-2 py-0.5 rounded bg-[#F1F1EC] text-[#202521] font-semibold text-[11px]">
                         {item.warehouse_code}
                       </span>
                     </td>
-                    <td className="py-3.5 px-5 font-semibold text-[#202521] tabular-nums">
-                      {formatCurrency(item.product.price)}
+                    <td className="py-3.5 px-5 tabular-nums">
+                      <div className="font-semibold text-[#202521]">
+                        {formatCurrency(item.product.price)}
+                      </div>
+                      {item.product.cost_price && parseFloat(item.product.cost_price) > 0 ? (
+                        <div className="mt-0.5">
+                          {(() => {
+                            const sp = parseFloat(item.product.price);
+                            const cp = parseFloat(item.product.cost_price);
+                            const m = sp > 0 ? ((sp - cp) / sp) * 100 : 0;
+                            return (
+                              <span
+                                className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  m >= 20
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    : m > 0
+                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    : 'bg-red-50 text-red-800 border border-red-200'
+                                }`}
+                              >
+                                {m.toFixed(1)}% margin
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-[#5E6B63]">No cost set</span>
+                      )}
                     </td>
                     <td className="py-3.5 px-5 text-[#5E6B63] tabular-nums font-medium">
                       {item.reorder_level} units
@@ -567,19 +767,33 @@ export const InventoryPage: React.FC = () => {
                     <td className="py-3.5 px-5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {canManageStock && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingStock(item);
-                              setNewReorderLevel(item.reorder_level);
-                            }}
-                            className="text-xs text-[#5E6B63] hover:text-[#173D32] h-7 w-7 p-0"
-                            title="Edit reorder level"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </Button>
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEditProduct(item.product);
+                              }}
+                              className="text-xs text-[#5E6B63] hover:text-[#173D32] h-7 px-1.5 text-[11px] gap-1"
+                              title="Edit product pricing & details"
+                            >
+                              <Edit className="w-3.5 h-3.5" /> SKU
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingStock(item);
+                                setNewReorderLevel(item.reorder_level);
+                              }}
+                              className="text-xs text-[#5E6B63] hover:text-[#173D32] h-7 w-7 p-0"
+                              title="Edit warehouse reorder level"
+                            >
+                              <SlidersHorizontal className="w-3.5 h-3.5" />
+                            </Button>
+                          </>
                         )}
                         <Button
                           variant="ghost"
@@ -657,7 +871,12 @@ export const InventoryPage: React.FC = () => {
           {selectedStockLevel && (
             <div className="space-y-4">
               <DialogHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <ProductThumbnail
+                    src={selectedStockLevel.product.thumbnail || selectedStockLevel.product.image}
+                    alt={selectedStockLevel.product.name}
+                    size="lg"
+                  />
                   <div>
                     <DialogTitle className="text-lg">
                       {selectedStockLevel.product.name}
@@ -908,6 +1127,287 @@ export const InventoryPage: React.FC = () => {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Create / Edit Modal with Live Margin Preview */}
+      <Dialog open={isProductModalOpen} onOpenChange={setIsProductModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingProduct ? `Edit Product: ${editingProduct.sku}` : 'New Catalog Product'}
+            </DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              productMutation.mutate();
+            }}
+            className="space-y-3.5 mt-2"
+          >
+            {/* Product Image Upload Zone */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#5E6B63]">
+                Product Image (JPEG, PNG, WebP · Max 2 MB)
+              </label>
+
+              {imagePreview ? (
+                <div className="flex items-center gap-4 p-3 bg-[#F8F8F5] border border-[#E3E1DA] rounded-lg">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-[#E3E1DA] bg-white shrink-0">
+                    <img
+                      src={imagePreview}
+                      alt="Product preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-[#202521] truncate">
+                      {imageFile ? imageFile.name : 'Current catalog image'}
+                    </p>
+                    {imageFile ? (
+                      <p className="text-[11px] text-[#5E6B63] mt-0.5">
+                        {(imageFile.size / 1024).toFixed(0)} KB · Ready to upload
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-[#173D32] font-medium mt-0.5">
+                        Saved in catalog
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-2">
+                      <label className="cursor-pointer text-xs font-semibold text-[#173D32] hover:underline">
+                        <span>Replace</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImageSelected(file);
+                          }}
+                        />
+                      </label>
+                      <span className="text-[#E3E1DA]">•</span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="text-xs font-semibold text-[#B3261E] hover:underline cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleImageSelected(file);
+                  }}
+                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
+                    isDragging
+                      ? 'border-[#173D32] bg-[#E6F2EA]/40'
+                      : 'border-[#E3E1DA] hover:border-[#173D32]/60 bg-[#FBFBFA]'
+                  }`}
+                  onClick={() => {
+                    document.getElementById('product-image-upload-input')?.click();
+                  }}
+                >
+                  <input
+                    id="product-image-upload-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImageSelected(file);
+                    }}
+                  />
+                  <UploadCloud className="w-6 h-6 text-[#5E6B63] mx-auto mb-1" />
+                  <p className="text-xs font-medium text-[#202521]">
+                    Drag &amp; drop product photo, or{' '}
+                    <span className="text-[#173D32] font-semibold underline">browse</span>
+                  </p>
+                  <p className="text-[10px] text-[#5E6B63] mt-0.5">
+                    Supports JPEG, PNG, WebP up to 2 MB
+                  </p>
+                </div>
+              )}
+
+              {imageError && (
+                <p className="text-xs text-[#B3261E] font-medium flex items-center gap-1 mt-1">
+                  <span>•</span> {imageError}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="SKU Code *"
+                required
+                disabled={!!editingProduct}
+                value={productForm.sku}
+                onChange={(e) => setProductForm({ ...productForm, sku: e.target.value.toUpperCase() })}
+                placeholder="e.g. ELEC-001"
+              />
+              <Input
+                label="Barcode / EAN (Optional)"
+                value={productForm.barcode}
+                onChange={(e) => setProductForm({ ...productForm, barcode: e.target.value })}
+                placeholder="e.g. 8901234567890"
+                helperText="Scannable barcode or QR"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#5E6B63] mb-1.5">
+                Category *
+              </label>
+              <select
+                required
+                value={productForm.category}
+                onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                className="w-full h-10 px-3 py-2 text-xs bg-white border border-[#E3E1DA] rounded-md text-[#202521] focus:ring-2 focus:ring-[#173D32] outline-none"
+              >
+                <option value="">-- Choose Category --</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <Input
+              label="Item Name *"
+              required
+              value={productForm.name}
+              onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+              placeholder="e.g. Premium Wireless Mouse"
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Selling Price (₹) *"
+                type="number"
+                step="0.01"
+                min="0"
+                required
+                value={productForm.price}
+                onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
+                placeholder="1000.00"
+              />
+              <Input
+                label="Cost Price (₹)"
+                type="number"
+                step="0.01"
+                min="0"
+                value={productForm.cost_price}
+                onChange={(e) => setProductForm({ ...productForm, cost_price: e.target.value })}
+                placeholder="700.00"
+                helperText="Cost of goods sold"
+              />
+            </div>
+
+            {/* Live Gross Margin Preview */}
+            {(() => {
+              const sp = parseFloat(productForm.price) || 0;
+              const cp = parseFloat(productForm.cost_price) || 0;
+              const margin = sp > 0 ? ((sp - cp) / sp) * 100 : 0;
+              const unitProfit = sp - cp;
+              return (
+                <div className="p-3 bg-[#F8F9F8] border border-[#E3E1DA] rounded-lg text-xs space-y-1">
+                  <div className="flex justify-between items-center font-medium">
+                    <span className="text-[#5E6B63]">Gross Margin Preview:</span>
+                    <span
+                      className={`font-bold ${
+                        margin >= 20
+                          ? 'text-emerald-700'
+                          : margin > 0
+                          ? 'text-amber-700'
+                          : 'text-red-600'
+                      }`}
+                    >
+                      {margin.toFixed(1)}% ({formatCurrency(unitProfit)} profit/unit)
+                    </span>
+                  </div>
+                  {cp > sp && (
+                    <p className="text-[11px] text-red-600 font-medium">
+                      Warning: Unit cost exceeds selling price. Selling at a loss.
+                    </p>
+                  )}
+                  {cp <= 0 && (
+                    <p className="text-[11px] text-[#5E6B63]">
+                      Note: Products without cost are excluded from profit calculations until stock is received with PO.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[#5E6B63] mb-1.5">
+                  GST Rate (%)
+                </label>
+                <select
+                  value={productForm.gst_rate}
+                  onChange={(e) => setProductForm({ ...productForm, gst_rate: e.target.value })}
+                  className="w-full h-10 px-3 py-2 text-sm bg-white border border-[#E3E1DA] rounded-md text-[#202521] focus:ring-2 focus:ring-[#173D32] outline-none"
+                >
+                  <option value="0.00">0% (Nil / Exempt)</option>
+                  <option value="5.00">5% (Essential Goods)</option>
+                  <option value="12.00">12% (Standard Low)</option>
+                  <option value="18.00">18% (Standard High / Electronics)</option>
+                  <option value="28.00">28% (Luxury / Sin Goods)</option>
+                </select>
+              </div>
+              <Input
+                label="HSN / SAC Code"
+                value={productForm.hsn_code}
+                onChange={(e) => setProductForm({ ...productForm, hsn_code: e.target.value })}
+                placeholder="e.g. 8517, 8471"
+                helperText="Harmonized System Code"
+              />
+            </div>
+
+            <Input
+              label="Default Reorder Level"
+              type="number"
+              min="1"
+              value={productForm.default_reorder_level}
+              onChange={(e) =>
+                setProductForm({
+                  ...productForm,
+                  default_reorder_level: Number(e.target.value) || 5,
+                })
+              }
+              helperText="Default replenishment trigger threshold."
+            />
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#E3E1DA]">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsProductModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="bg-[#173D32] text-white hover:bg-[#122e26]"
+                isLoading={productMutation.isPending}
+              >
+                {editingProduct ? 'Save Changes' : 'Create Product'}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
