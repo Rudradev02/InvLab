@@ -142,6 +142,8 @@ export interface Product {
   description: string;
   price: string;
   cost_price?: string;
+  gst_rate?: string;
+  hsn_code?: string;
   default_reorder_level: number;
   is_active: boolean;
   created_at: string;
@@ -228,6 +230,13 @@ export interface SaleLine {
   unit_price: string;
   unit_cost?: string | null;
   subtotal: string;
+  gst_rate?: string;
+  hsn_code?: string;
+  taxable_amount?: string;
+  cgst_amount?: string;
+  sgst_amount?: string;
+  igst_amount?: string;
+  tax_amount?: string;
   returned_quantity?: number;
   returnable_quantity?: number;
 }
@@ -266,6 +275,7 @@ export type PaymentMethod = 'cash' | 'upi' | 'card' | 'credit' | 'unknown';
 export interface Sale {
   id: number;
   sale_number: string;
+  invoice_number?: string;
   warehouse: number;
   warehouse_name: string;
   warehouse_code: string;
@@ -274,10 +284,19 @@ export interface Sale {
   customer?: number | null;
   customer_name?: string | null;
   customer_phone?: string | null;
+  customer_gstin?: string;
+  place_of_supply?: string;
+  is_interstate?: boolean;
   subtotal: string;
   discount_type: DiscountType;
   discount_value: string;
   discount_amount: string;
+  taxable_amount?: string;
+  cgst_amount?: string;
+  sgst_amount?: string;
+  igst_amount?: string;
+  total_tax_amount?: string;
+  round_off_amount?: string;
   total_amount: string;
   amount_paid: string;
   balance_due: string;
@@ -461,5 +480,99 @@ export interface PurchaseOrder {
   total_received_units: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface BusinessSettings {
+  id: number;
+  name: string;
+  address_line1: string;
+  address_line2: string;
+  city: string;
+  state: string;
+  pincode: string;
+  phone: string;
+  email: string;
+  gstin: string;
+  invoice_prefix: string;
+  prices_include_tax: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvoiceParty {
+  name: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  phone?: string;
+  email?: string;
+  gstin?: string;
+  warehouse_name?: string;
+  warehouse_code?: string;
+  customer_id?: number | null;
+  address?: string;
+  place_of_supply?: string;
+}
+
+export interface InvoiceItem {
+  id: number;
+  product_id: number;
+  product_name: string;
+  product_sku: string;
+  hsn_code: string;
+  quantity: number;
+  unit_price: string;
+  subtotal: string;
+  gst_rate: string;
+  taxable_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  tax_amount: string;
+  total_amount: string;
+}
+
+export interface InvoiceHsnSummary {
+  hsn_code: string;
+  gst_rate: string;
+  taxable_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  tax_amount: string;
+}
+
+export interface InvoiceFinancials {
+  subtotal: string;
+  discount_type: DiscountType;
+  discount_value: string;
+  discount_amount: string;
+  taxable_amount: string;
+  cgst_amount: string;
+  sgst_amount: string;
+  igst_amount: string;
+  total_tax_amount: string;
+  round_off_amount: string;
+  total_amount: string;
+  amount_paid: string;
+  balance_due: string;
+  payment_method: PaymentMethod;
+  amount_in_words: string;
+}
+
+export interface InvoiceDetails {
+  sale_id: number;
+  sale_number: string;
+  invoice_number: string;
+  created_at: string;
+  seller: InvoiceParty;
+  buyer: InvoiceParty;
+  is_interstate: boolean;
+  prices_include_tax: boolean;
+  items: InvoiceItem[];
+  hsn_summary: InvoiceHsnSummary[];
+  financials: InvoiceFinancials;
 }
 

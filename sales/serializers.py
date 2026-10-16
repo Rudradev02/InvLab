@@ -74,6 +74,13 @@ class SaleLineSerializer(serializers.ModelSerializer):
             "unit_price",
             "unit_cost",
             "subtotal",
+            "gst_rate",
+            "hsn_code",
+            "taxable_amount",
+            "cgst_amount",
+            "sgst_amount",
+            "igst_amount",
+            "tax_amount",
             "returned_quantity",
             "returnable_quantity",
         ]
@@ -102,6 +109,7 @@ class SaleSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "sale_number",
+            "invoice_number",
             "warehouse",
             "warehouse_name",
             "warehouse_code",
@@ -110,10 +118,19 @@ class SaleSerializer(serializers.ModelSerializer):
             "customer",
             "customer_name",
             "customer_phone",
+            "customer_gstin",
+            "place_of_supply",
+            "is_interstate",
             "subtotal",
             "discount_type",
             "discount_value",
             "discount_amount",
+            "taxable_amount",
+            "cgst_amount",
+            "sgst_amount",
+            "igst_amount",
+            "total_tax_amount",
+            "round_off_amount",
             "total_amount",
             "amount_paid",
             "balance_due",
@@ -157,12 +174,15 @@ class CreateSaleLineSerializer(serializers.Serializer):
 class CreateSaleRequestSerializer(serializers.Serializer):
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
     customer_id = serializers.IntegerField(required=False, allow_null=True)
+    customer_gstin = serializers.CharField(required=False, allow_blank=True, default="")
+    place_of_supply = serializers.CharField(required=False, allow_blank=True, default="")
     amount_paid = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
     discount_type = serializers.ChoiceField(choices=["none", "amount", "percent"], default="none", required=False)
     discount_value = serializers.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"), required=False)
     payment_method = serializers.ChoiceField(choices=["cash", "upi", "card", "credit", "unknown"], default="cash", required=False)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
     lines = CreateSaleLineSerializer(many=True, allow_empty=False)
+
 
 
 class CreateReturnLineSerializer(serializers.Serializer):

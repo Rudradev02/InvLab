@@ -30,6 +30,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "description",
             "price",
             "cost_price",
+            "gst_rate",
+            "hsn_code",
             "stock",
             "default_reorder_level",
             "is_active",

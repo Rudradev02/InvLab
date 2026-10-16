@@ -35,6 +35,7 @@ router.register(r"transfers", StockTransferViewSet, basename="transfer")
 router.register(r"audit", AuditLogViewSet, basename="audit")
 
 from api.dashboard_views import DashboardView
+from core.views import BusinessSettingsView
 
 urlpatterns = [
     # Auth endpoints
@@ -45,6 +46,8 @@ urlpatterns = [
     path("auth/change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
     # Dashboard endpoint
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
+    # Business & GST Settings
+    path("business-settings/", BusinessSettingsView.as_view(), name="business-settings"),
     # Reports endpoints
     path("reports/", include("reports.urls")),
     # Router endpoints under /api/v1/

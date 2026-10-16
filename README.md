@@ -10,6 +10,7 @@ Multi-warehouse inventory and sales management for small and mid-size businesses
 
 - Tracks products and stock separately for each warehouse
 - Records sales at the counter with correct, race-free stock deduction
+- Generates GST-ready tax invoices with sequential numbering per warehouse/financial year, HSN summaries, and downloadable PDF format *(Note: InvLab provides invoice generation and formatting; it is not a certified tax filing or GSTR upload software)*
 - Moves stock between warehouses with a dispatch and receive flow
 - Gives the Admin one place to see every warehouse: manager, staff, address, stock and sales
 - Keeps an immutable ledger of every stock movement, with who did it and why

@@ -85,6 +85,8 @@ export const InventoryPage: React.FC = () => {
     category: '',
     price: '',
     cost_price: '',
+    gst_rate: '18.00',
+    hsn_code: '8517',
     default_reorder_level: 5,
     description: '',
   });
@@ -97,6 +99,8 @@ export const InventoryPage: React.FC = () => {
       category: categories.length > 0 ? categories[0].id.toString() : '',
       price: '',
       cost_price: '',
+      gst_rate: '18.00',
+      hsn_code: '8517',
       default_reorder_level: 5,
       description: '',
     });
@@ -111,6 +115,8 @@ export const InventoryPage: React.FC = () => {
       category: prod.category.toString(),
       price: prod.price,
       cost_price: prod.cost_price || '0.00',
+      gst_rate: prod.gst_rate || '18.00',
+      hsn_code: prod.hsn_code || '',
       default_reorder_level: prod.default_reorder_level || 5,
       description: prod.description || '',
     });
@@ -125,6 +131,8 @@ export const InventoryPage: React.FC = () => {
         category: parseInt(productForm.category, 10),
         price: productForm.price,
         cost_price: productForm.cost_price || '0.00',
+        gst_rate: productForm.gst_rate || '0.00',
+        hsn_code: productForm.hsn_code || '',
         default_reorder_level: Number(productForm.default_reorder_level),
         description: productForm.description,
       };
@@ -1155,6 +1163,32 @@ export const InventoryPage: React.FC = () => {
                 </div>
               );
             })()}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[#5E6B63] mb-1.5">
+                  GST Rate (%)
+                </label>
+                <select
+                  value={productForm.gst_rate}
+                  onChange={(e) => setProductForm({ ...productForm, gst_rate: e.target.value })}
+                  className="w-full h-10 px-3 py-2 text-sm bg-white border border-[#E3E1DA] rounded-md text-[#202521] focus:ring-2 focus:ring-[#173D32] outline-none"
+                >
+                  <option value="0.00">0% (Nil / Exempt)</option>
+                  <option value="5.00">5% (Essential Goods)</option>
+                  <option value="12.00">12% (Standard Low)</option>
+                  <option value="18.00">18% (Standard High / Electronics)</option>
+                  <option value="28.00">28% (Luxury / Sin Goods)</option>
+                </select>
+              </div>
+              <Input
+                label="HSN / SAC Code"
+                value={productForm.hsn_code}
+                onChange={(e) => setProductForm({ ...productForm, hsn_code: e.target.value })}
+                placeholder="e.g. 8517, 8471"
+                helperText="Harmonized System Code"
+              />
+            </div>
 
             <Input
               label="Default Reorder Level"

@@ -33,6 +33,18 @@ class Product(TimestampedModel):
         help_text="DEPRECATED: Cached sum of warehouse stock levels. Use StockLevel for active inventory.",
     )
     default_reorder_level = models.PositiveIntegerField(default=5)
+    gst_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0.00,
+        help_text="GST percentage rate, e.g. 0.00, 5.00, 12.00, 18.00, 28.00",
+    )
+    hsn_code = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Harmonized System of Nomenclature code",
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:

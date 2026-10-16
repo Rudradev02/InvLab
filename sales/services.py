@@ -7,7 +7,7 @@ from django.utils import timezone
 from audit.models import AuditLog
 from catalog.models import Product
 from core.exceptions import DomainError, InsufficientStockError
-from core.models import NumberSequence
+from core.models import BusinessSettings, NumberSequence
 from core.permissions import get_user_role, ROLE_ADMIN, ROLE_WAREHOUSE_MANAGER, ROLE_STAFF
 from inventory.models import StockLevel, StockMovement
 from inventory.services import get_or_create_locked_stock_level, update_cached_product_stock
@@ -15,6 +15,7 @@ from customers.models import Customer
 from warehouses.models import Warehouse
 
 from .models import (
+    InvoiceSequence,
     Sale,
     SaleLine,
     SaleReturn,
@@ -40,6 +41,8 @@ def create_sale(
     discount_type: str = DISCOUNT_TYPE_NONE,
     discount_value: Decimal | float | int | str = 0,
     payment_method: str = PAYMENT_METHOD_CASH,
+    place_of_supply: str | None = None,
+    customer_gstin: str | None = None,
 ) -> Sale:
     """
     Creates a sale atomically with row-locking, stock checks, and ledger recording.
@@ -49,8 +52,12 @@ def create_sale(
     - Fixed lock order: warehouse id, then product id (BR-11)
     - Checked after locking
     - Total computed on server (BR-08)
-    - Sequential sale number inside transaction from locked counter (NFR-DATA-06)
+    - Sequential sale and invoice number inside transaction from locked counter (NFR-DATA-06)
     - Idempotency key per user returns existing sale on replay
+    - Indian GST: CGST + SGST (intra-state) or IGST (inter-state)
+    - Inclusive vs Exclusive pricing support
+    - Proportional discount before tax
+    - Nearest rupee round-off line
     """
     if idempotency_key:
         existing = Sale.objects.filter(user=user, idempotency_key=idempotency_key).first()
@@ -82,22 +89,48 @@ def create_sale(
                 "Cannot record sale in a deactivated warehouse.", code="warehouse_inactive"
             )
 
+        biz_settings = BusinessSettings.get_settings()
+        seller_state = (biz_settings.state or "Maharashtra").strip()
+
+        customer = None
+        if customer_id:
+            customer = Customer.objects.filter(pk=customer_id).first()
+            if not customer or not customer.is_active:
+                raise DomainError(
+                    "Customer is inactive or does not exist.", code="customer_inactive"
+                )
+
+        cust_gstin = (customer_gstin if customer_gstin is not None else (customer.gstin if customer else "")).strip()
+        pos = (place_of_supply if place_of_supply is not None else "").strip()
+        if not pos:
+            pos = seller_state
+        is_interstate = (pos.lower() != seller_state.lower())
+
         year = timezone.now().year
         seq_num = NumberSequence.get_next_number(
             warehouse=warehouse, sequence_type="sale", year=year
         )
         sale_number = f"SL-{warehouse.code}-{year}-{seq_num:05d}"
+        invoice_number = InvoiceSequence.get_next_invoice_number(
+            warehouse=warehouse, prefix=biz_settings.invoice_prefix
+        )
 
         sale = Sale.objects.create(
             sale_number=sale_number,
+            invoice_number=invoice_number,
             warehouse=warehouse,
             user=user,
+            customer=customer,
+            customer_gstin=cust_gstin,
+            place_of_supply=pos,
+            is_interstate=is_interstate,
             total_amount=Decimal("0.00"),
             notes=notes,
             idempotency_key=idempotency_key or None,
         )
 
         subtotal_amount = Decimal("0.00")
+        line_items = []
 
         for line in sorted_lines:
             product_id = line["product_id"]
@@ -149,25 +182,23 @@ def create_sale(
 
             update_cached_product_stock(product.id)
 
-            # Server computes totals from product price at time of sale (BR-08)
             unit_price = product.price
-            line_subtotal = unit_price * Decimal(qty)
+            line_subtotal = (unit_price * Decimal(qty)).quantize(Decimal("0.01"))
             subtotal_amount += line_subtotal
 
-            # Cost price snapshot: if product cost_price is set and > 0, copy as snapshot.
-            # Missing or 0 cost price is stored as None (unknown cost, never treated as 0).
             unit_cost = None
             if product.cost_price is not None and product.cost_price > Decimal("0.00"):
                 unit_cost = product.cost_price
 
-            SaleLine.objects.create(
-                sale=sale,
-                product=product,
-                quantity=qty,
-                unit_price=unit_price,
-                subtotal=line_subtotal,
-                unit_cost=unit_cost,
-            )
+            line_items.append({
+                "product": product,
+                "quantity": qty,
+                "unit_price": unit_price,
+                "subtotal": line_subtotal,
+                "unit_cost": unit_cost,
+                "gst_rate": product.gst_rate or Decimal("0.00"),
+                "hsn_code": product.hsn_code or "",
+            })
 
         # Discount Validation & Calculation
         discount_type = str(discount_type or DISCOUNT_TYPE_NONE).lower()
@@ -211,21 +242,94 @@ def create_sale(
             discount_val = Decimal("0.00")
             discount_amount = Decimal("0.00")
 
-        total_amount = max(Decimal("0.00"), subtotal_amount - discount_amount)
+        # Proportional discount allocation before tax
+        allocated_discounts = [Decimal("0.00")] * len(line_items)
+        if subtotal_amount > Decimal("0.00") and discount_amount > Decimal("0.00"):
+            for idx, item in enumerate(line_items):
+                ld = (item["subtotal"] / subtotal_amount * discount_amount).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                allocated_discounts[idx] = min(ld, item["subtotal"])
+            diff = discount_amount - sum(allocated_discounts)
+            if diff != Decimal("0.00"):
+                max_idx = max(range(len(line_items)), key=lambda i: line_items[i]["subtotal"])
+                allocated_discounts[max_idx] = max(Decimal("0.00"), allocated_discounts[max_idx] + diff)
+
+        prices_include_tax = biz_settings.prices_include_tax
+        total_taxable = Decimal("0.00")
+        total_cgst = Decimal("0.00")
+        total_sgst = Decimal("0.00")
+        total_igst = Decimal("0.00")
+        total_tax = Decimal("0.00")
+
+        for idx, item in enumerate(line_items):
+            line_disc = allocated_discounts[idx]
+            net_line_subtotal = item["subtotal"] - line_disc
+            gst_rate = item["gst_rate"]
+
+            if prices_include_tax:
+                if gst_rate > Decimal("0.00"):
+                    tax_factor = Decimal("1.00") + (gst_rate / Decimal("100.00"))
+                    taxable_val = (net_line_subtotal / tax_factor).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                    tax_val = net_line_subtotal - taxable_val
+                else:
+                    taxable_val = net_line_subtotal
+                    tax_val = Decimal("0.00")
+            else:
+                taxable_val = net_line_subtotal
+                if gst_rate > Decimal("0.00"):
+                    tax_val = (taxable_val * (gst_rate / Decimal("100.00"))).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                else:
+                    tax_val = Decimal("0.00")
+
+            if is_interstate:
+                line_igst = tax_val
+                line_cgst = Decimal("0.00")
+                line_sgst = Decimal("0.00")
+            else:
+                line_igst = Decimal("0.00")
+                line_cgst = (tax_val / Decimal("2.00")).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                line_sgst = tax_val - line_cgst
+
+            SaleLine.objects.create(
+                sale=sale,
+                product=item["product"],
+                quantity=item["quantity"],
+                unit_price=item["unit_price"],
+                subtotal=item["subtotal"],
+                unit_cost=item["unit_cost"],
+                gst_rate=gst_rate,
+                hsn_code=item["hsn_code"],
+                taxable_amount=taxable_val,
+                cgst_amount=line_cgst,
+                sgst_amount=line_sgst,
+                igst_amount=line_igst,
+                tax_amount=tax_val,
+            )
+
+            total_taxable += taxable_val
+            total_cgst += line_cgst
+            total_sgst += line_sgst
+            total_igst += line_igst
+            total_tax += tax_val
+
+        # Exact total before round-off
+        exact_total = total_taxable + total_tax
+        rounded_total = exact_total.quantize(Decimal("1.00"), rounding=ROUND_HALF_UP)
+        round_off = (rounded_total - exact_total).quantize(Decimal("0.01"))
+        total_amount = rounded_total
 
         # Payment Method & Customer Validation
         payment_method = str(payment_method or PAYMENT_METHOD_CASH).lower()
         valid_methods = [c[0] for c in PAYMENT_METHOD_CHOICES]
         if payment_method not in valid_methods:
             raise DomainError(f"Invalid payment method: {payment_method}.", code="invalid_payment_method")
-
-        customer = None
-        if customer_id:
-            customer = Customer.objects.filter(pk=customer_id).first()
-            if not customer or not customer.is_active:
-                raise DomainError(
-                    "Customer is inactive or does not exist.", code="customer_inactive"
-                )
 
         if payment_method == PAYMENT_METHOD_CREDIT:
             if not customer:
@@ -257,22 +361,32 @@ def create_sale(
             else:
                 balance_due = Decimal("0.00")
 
-        sale.customer = customer
         sale.subtotal = subtotal_amount
         sale.discount_type = discount_type
         sale.discount_value = discount_val
         sale.discount_amount = discount_amount
+        sale.taxable_amount = total_taxable
+        sale.cgst_amount = total_cgst
+        sale.sgst_amount = total_sgst
+        sale.igst_amount = total_igst
+        sale.total_tax_amount = total_tax
+        sale.round_off_amount = round_off
         sale.total_amount = total_amount
         sale.amount_paid = final_paid
         sale.balance_due = balance_due
         sale.payment_method = payment_method
         sale.save(
             update_fields=[
-                "customer",
                 "subtotal",
                 "discount_type",
                 "discount_value",
                 "discount_amount",
+                "taxable_amount",
+                "cgst_amount",
+                "sgst_amount",
+                "igst_amount",
+                "total_tax_amount",
+                "round_off_amount",
                 "total_amount",
                 "amount_paid",
                 "balance_due",

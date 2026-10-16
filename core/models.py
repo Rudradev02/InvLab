@@ -41,3 +41,29 @@ class NumberSequence(models.Model):
             seq.last_number += 1
             seq.save(update_fields=["last_number"])
             return seq.last_number
+
+
+class BusinessSettings(TimestampedModel):
+    name = models.CharField(max_length=200, default="InvLab Enterprise")
+    address_line1 = models.CharField(max_length=255, default="123 Tech Park, Phase 1")
+    address_line2 = models.CharField(max_length=255, blank=True, default="")
+    city = models.CharField(max_length=100, default="Pune")
+    state = models.CharField(max_length=100, default="Maharashtra")
+    pincode = models.CharField(max_length=20, default="411057")
+    phone = models.CharField(max_length=30, blank=True, default="+91 98765 43210")
+    email = models.EmailField(blank=True, default="billing@invlab.local")
+    gstin = models.CharField(max_length=20, default="27AABCU9603R1ZM")
+    invoice_prefix = models.CharField(max_length=10, blank=True, default="")
+    prices_include_tax = models.BooleanField(
+        default=False,
+        help_text="If True, product catalog prices include GST. If False, GST is added on top.",
+    )
+
+    class Meta:
+        db_table = "core_business_settings"
+        verbose_name_plural = "business settings"
+
+    @classmethod
+    def get_settings(cls):
+        settings, _ = cls.objects.get_or_create(id=1)
+        return settings
