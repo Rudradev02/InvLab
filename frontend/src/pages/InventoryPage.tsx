@@ -23,8 +23,12 @@ import {
   Edit,
   PackagePlus,
   QrCode,
+  UploadCloud,
+  X,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ProductThumbnail } from '../components/common/ProductThumbnail';
 
 export const InventoryPage: React.FC = () => {
   const { user, selectedWarehouseId } = useAuth();
@@ -93,6 +97,35 @@ export const InventoryPage: React.FC = () => {
     description: '',
   });
 
+  // Product Image State
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [removeExistingImage, setRemoveExistingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleImageSelected = (file: File) => {
+    setImageError(null);
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setImageError('Unsupported image format. Allowed formats: JPEG, PNG, and WebP.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setImageError('Image file size exceeds the 2 MB limit.');
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setRemoveExistingImage(false);
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setRemoveExistingImage(true);
+    setImageError(null);
+  };
+
   const handleOpenAddProduct = () => {
     setEditingProduct(null);
     setProductForm({
@@ -107,6 +140,10 @@ export const InventoryPage: React.FC = () => {
       default_reorder_level: 5,
       description: '',
     });
+    setImageFile(null);
+    setImagePreview(null);
+    setRemoveExistingImage(false);
+    setImageError(null);
     setIsProductModalOpen(true);
   };
 
@@ -124,32 +161,46 @@ export const InventoryPage: React.FC = () => {
       default_reorder_level: prod.default_reorder_level || 5,
       description: prod.description || '',
     });
+    setImageFile(null);
+    setRemoveExistingImage(false);
+    setImageError(null);
+    setImagePreview(prod.thumbnail || prod.image || null);
     setIsProductModalOpen(true);
   };
 
   const productMutation = useMutation({
     mutationFn: () => {
-      const payload: any = {
-        sku: productForm.sku,
-        name: productForm.name,
-        category: parseInt(productForm.category, 10),
-        price: productForm.price,
-        cost_price: productForm.cost_price || '0.00',
-        gst_rate: productForm.gst_rate || '0.00',
-        hsn_code: productForm.hsn_code || '',
-        barcode: productForm.barcode?.trim() || null,
-        default_reorder_level: Number(productForm.default_reorder_level),
-        description: productForm.description,
-      };
+      const formData = new FormData();
+      formData.append('sku', productForm.sku);
+      formData.append('name', productForm.name);
+      formData.append('category', productForm.category);
+      formData.append('price', productForm.price);
+      formData.append('cost_price', productForm.cost_price || '0.00');
+      formData.append('gst_rate', productForm.gst_rate || '0.00');
+      formData.append('hsn_code', productForm.hsn_code || '');
+      if (productForm.barcode?.trim()) {
+        formData.append('barcode', productForm.barcode.trim());
+      } else {
+        formData.append('barcode', '');
+      }
+      formData.append('default_reorder_level', String(productForm.default_reorder_level));
+      formData.append('description', productForm.description || '');
+
+      if (imageFile) {
+        formData.append('image', imageFile);
+      } else if (removeExistingImage) {
+        formData.append('image', '');
+      }
+
       if (editingProduct) {
         return apiRequest<Product>(`products/${editingProduct.id}/`, {
           method: 'PATCH',
-          body: JSON.stringify(payload),
+          body: formData,
         });
       }
       return apiRequest<Product>('products/', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: formData,
       });
     },
     onSuccess: (p) => {
@@ -629,8 +680,7 @@ export const InventoryPage: React.FC = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-[#F1F1EC] text-[#5E6B63] border-b border-[#E3E1DA]">
-                  <th className="py-3 px-5 font-semibold">SKU</th>
-                  <th className="py-3 px-5 font-semibold">Product Name</th>
+                  <th className="py-3 px-5 font-semibold">Product</th>
                   <th className="py-3 px-5 font-semibold">Warehouse</th>
                   <th className="py-3 px-5 font-semibold">Unit Price</th>
                   <th className="py-3 px-5 font-semibold">Reorder Level</th>
@@ -648,17 +698,28 @@ export const InventoryPage: React.FC = () => {
                     }}
                     className="hover:bg-[#F8F8F5]/80 transition-colors cursor-pointer group"
                   >
-                    <td className="py-3.5 px-5 font-mono font-semibold text-[#173D32]">
-                      <div>{item.product.sku}</div>
-                      {item.product.barcode && (
-                        <div className="text-[10px] text-[#5E6B63] flex items-center gap-1 font-normal font-sans mt-0.5">
-                          <QrCode className="w-2.5 h-2.5 text-[#173D32]" />
-                          <span className="font-mono">{item.product.barcode}</span>
+                    <td className="py-3.5 px-5">
+                      <div className="flex items-center gap-3">
+                        <ProductThumbnail
+                          src={item.product.thumbnail || item.product.image}
+                          alt={item.product.name}
+                          size="md"
+                        />
+                        <div className="min-w-0">
+                          <div className="font-semibold text-[#202521] text-xs leading-snug truncate max-w-xs sm:max-w-sm">
+                            {item.product.name}
+                          </div>
+                          <div className="font-mono text-[11px] font-medium text-[#173D32] mt-0.5">
+                            {item.product.sku}
+                          </div>
+                          {item.product.barcode && (
+                            <div className="text-[10px] text-[#5E6B63] flex items-center gap-1 font-normal font-sans mt-0.5">
+                              <QrCode className="w-2.5 h-2.5 text-[#173D32]" />
+                              <span className="font-mono">{item.product.barcode}</span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-5 font-semibold text-[#202521]">
-                      {item.product.name}
+                      </div>
                     </td>
                     <td className="py-3.5 px-5 text-[#5E6B63]">
                       <span className="px-2 py-0.5 rounded bg-[#F1F1EC] text-[#202521] font-semibold text-[11px]">
@@ -810,7 +871,12 @@ export const InventoryPage: React.FC = () => {
           {selectedStockLevel && (
             <div className="space-y-4">
               <DialogHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <ProductThumbnail
+                    src={selectedStockLevel.product.thumbnail || selectedStockLevel.product.image}
+                    alt={selectedStockLevel.product.name}
+                    size="lg"
+                  />
                   <div>
                     <DialogTitle className="text-lg">
                       {selectedStockLevel.product.name}
@@ -1079,6 +1145,108 @@ export const InventoryPage: React.FC = () => {
             }}
             className="space-y-3.5 mt-2"
           >
+            {/* Product Image Upload Zone */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-[#5E6B63]">
+                Product Image (JPEG, PNG, WebP · Max 2 MB)
+              </label>
+
+              {imagePreview ? (
+                <div className="flex items-center gap-4 p-3 bg-[#F8F8F5] border border-[#E3E1DA] rounded-lg">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-[#E3E1DA] bg-white shrink-0">
+                    <img
+                      src={imagePreview}
+                      alt="Product preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-[#202521] truncate">
+                      {imageFile ? imageFile.name : 'Current catalog image'}
+                    </p>
+                    {imageFile ? (
+                      <p className="text-[11px] text-[#5E6B63] mt-0.5">
+                        {(imageFile.size / 1024).toFixed(0)} KB · Ready to upload
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-[#173D32] font-medium mt-0.5">
+                        Saved in catalog
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-2">
+                      <label className="cursor-pointer text-xs font-semibold text-[#173D32] hover:underline">
+                        <span>Replace</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleImageSelected(file);
+                          }}
+                        />
+                      </label>
+                      <span className="text-[#E3E1DA]">•</span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="text-xs font-semibold text-[#B3261E] hover:underline cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleImageSelected(file);
+                  }}
+                  className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors cursor-pointer ${
+                    isDragging
+                      ? 'border-[#173D32] bg-[#E6F2EA]/40'
+                      : 'border-[#E3E1DA] hover:border-[#173D32]/60 bg-[#FBFBFA]'
+                  }`}
+                  onClick={() => {
+                    document.getElementById('product-image-upload-input')?.click();
+                  }}
+                >
+                  <input
+                    id="product-image-upload-input"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImageSelected(file);
+                    }}
+                  />
+                  <UploadCloud className="w-6 h-6 text-[#5E6B63] mx-auto mb-1" />
+                  <p className="text-xs font-medium text-[#202521]">
+                    Drag &amp; drop product photo, or{' '}
+                    <span className="text-[#173D32] font-semibold underline">browse</span>
+                  </p>
+                  <p className="text-[10px] text-[#5E6B63] mt-0.5">
+                    Supports JPEG, PNG, WebP up to 2 MB
+                  </p>
+                </div>
+              )}
+
+              {imageError && (
+                <p className="text-xs text-[#B3261E] font-medium flex items-center gap-1 mt-1">
+                  <span>•</span> {imageError}
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="SKU Code *"

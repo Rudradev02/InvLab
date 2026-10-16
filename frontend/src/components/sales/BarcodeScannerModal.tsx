@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Product, StockLevel } from '../../types';
 import { formatCurrency } from '../../lib/format';
 import { useAuth } from '../../context/AuthContext';
+import { ProductThumbnail } from '../common/ProductThumbnail';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -522,18 +523,22 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
           {/* Last Scanned Item Banner */}
           {lastScannedProduct && (
             <div className="p-3 bg-[#E6F2EA] border border-[#173D32]/20 rounded-lg flex items-center justify-between text-xs animate-in fade-in">
-              <div className="flex items-center gap-2.5">
-                <CheckCircle2 className="w-5 h-5 text-[#2F7D4F] shrink-0" />
-                <div>
-                  <div className="font-bold text-[#173D32]">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <ProductThumbnail
+                  src={lastScannedProduct.product.thumbnail || lastScannedProduct.product.image}
+                  alt={lastScannedProduct.product.name}
+                  size="sm"
+                />
+                <div className="min-w-0">
+                  <div className="font-bold text-[#173D32] truncate">
                     {lastScannedProduct.product.name}
                   </div>
-                  <div className="text-[11px] text-[#5E6B63]">
+                  <div className="text-[11px] text-[#5E6B63] truncate">
                     SKU: {lastScannedProduct.product.sku} • {formatCurrency(lastScannedProduct.product.price)} • In Stock: {lastScannedProduct.stock} units
                   </div>
                 </div>
               </div>
-              <span className="font-bold text-[11px] bg-emerald-600 text-white px-2 py-0.5 rounded">
+              <span className="font-bold text-[11px] bg-emerald-600 text-white px-2 py-0.5 rounded shrink-0">
                 +1 Added
               </span>
             </div>

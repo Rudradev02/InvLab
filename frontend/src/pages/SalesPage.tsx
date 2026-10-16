@@ -33,6 +33,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ProductThumbnail } from '../components/common/ProductThumbnail';
 
 const INDIAN_STATES = [
   'Andaman and Nicobar Islands',
@@ -683,6 +684,45 @@ export const SalesPage: React.FC = () => {
                       </option>
                     ))}
                   </select>
+
+                  {/* Selected Product Visual Preview */}
+                  {(() => {
+                    const selectedItem = availableStock.find(
+                      (s) => String(s.product.id) === selectedProductId
+                    );
+                    if (!selectedItem) return null;
+                    return (
+                      <div className="flex items-center gap-2.5 p-2 bg-[#F8F8F5] border border-[#E3E1DA] rounded-md mt-1.5 animate-in fade-in duration-100">
+                        <ProductThumbnail
+                          src={selectedItem.product.thumbnail || selectedItem.product.image}
+                          alt={selectedItem.product.name}
+                          size="sm"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-[#202521] truncate">
+                            {selectedItem.product.name}
+                          </p>
+                          <div className="flex items-center gap-2 text-[11px] text-[#5E6B63] mt-0.5">
+                            <span className="font-mono text-[#173D32]">{selectedItem.product.sku}</span>
+                            <span>•</span>
+                            <span className="font-semibold text-[#202521]">
+                              {formatCurrency(selectedItem.product.price)}
+                            </span>
+                            <span>•</span>
+                            <span
+                              className={
+                                selectedItem.quantity <= selectedItem.reorder_level
+                                  ? 'text-[#B3261E] font-semibold'
+                                  : 'text-[#2F7D4F] font-semibold'
+                              }
+                            >
+                              {selectedItem.quantity} in stock
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="sm:col-span-2 space-y-1.5">
@@ -729,34 +769,45 @@ export const SalesPage: React.FC = () => {
                         </td>
                       </tr>
                     ) : (
-                      cart.map((line, idx) => (
-                        <tr key={line.productId} className="hover:bg-[#F8F8F5]/50">
-                          <td className="py-2 px-3 font-mono font-medium text-[#173D32]">
-                            {line.sku}
-                          </td>
-                          <td className="py-2 px-3 font-medium text-[#202521]">
-                            {line.productName}
-                          </td>
-                          <td className="py-2 px-3 text-right tabular-nums">
-                            {formatCurrency(line.unitPrice)}
-                          </td>
-                          <td className="py-2 px-3 text-center font-semibold">
-                            {line.quantity}
-                          </td>
-                          <td className="py-2 px-3 text-right font-bold text-[#173D32] tabular-nums">
-                            {formatCurrency(line.unitPrice * line.quantity)}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveFromCart(idx)}
-                              className="text-red-500 hover:text-red-700 p-1"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      cart.map((line, idx) => {
+                        const stockItem = availableStock.find((s) => s.product.id === line.productId);
+                        const thumb = stockItem?.product.thumbnail || stockItem?.product.image;
+                        return (
+                          <tr key={line.productId} className="hover:bg-[#F8F8F5]/50">
+                            <td className="py-2.5 px-3 font-mono font-medium text-[#173D32] whitespace-nowrap">
+                              {line.sku}
+                            </td>
+                            <td className="py-2.5 px-3 font-medium text-[#202521]">
+                              <div className="flex items-center gap-2">
+                                <ProductThumbnail
+                                  src={thumb}
+                                  alt={line.productName}
+                                  size="xs"
+                                />
+                                <span className="truncate max-w-[200px] sm:max-w-xs">{line.productName}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right tabular-nums">
+                              {formatCurrency(line.unitPrice)}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-semibold">
+                              {line.quantity}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-[#173D32] tabular-nums">
+                              {formatCurrency(line.unitPrice * line.quantity)}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveFromCart(idx)}
+                                className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

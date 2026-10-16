@@ -60,7 +60,9 @@ export async function apiRequest<T>(
   headers.set('Accept', 'application/json');
 
   if (isWrite) {
-    headers.set('Content-Type', 'application/json');
+    if (!(options.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json');
+    }
     const csrfToken = await ensureCsrfToken();
     if (csrfToken) {
       headers.set('X-CSRFToken', csrfToken);

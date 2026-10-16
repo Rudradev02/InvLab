@@ -2,6 +2,7 @@ from django.db import models
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from core.permissions import (
@@ -59,6 +60,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.filter(is_active=True).select_related("category")
     serializer_class = ProductSerializer
     permission_classes = [IsStaff]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "sku", "barcode", "category__name"]
     ordering_fields = ["name", "price", "created_at"]
