@@ -36,6 +36,7 @@ router.register(r"audit", AuditLogViewSet, basename="audit")
 
 from api.dashboard_views import DashboardView
 from core.views import BusinessSettingsView
+from notifications.views import LowStockAlertsView, NotificationSettingsView
 
 urlpatterns = [
     # Auth endpoints
@@ -48,6 +49,9 @@ urlpatterns = [
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     # Business & GST Settings
     path("business-settings/", BusinessSettingsView.as_view(), name="business-settings"),
+    # Notifications & Alert Settings
+    path("notification-settings/", NotificationSettingsView.as_view(), name="notification-settings"),
+    path("notifications/low-stock/", LowStockAlertsView.as_view(), name="notifications-low-stock"),
     # Reports endpoints
     path("reports/", include("reports.urls")),
     # Router endpoints under /api/v1/

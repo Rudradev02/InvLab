@@ -6,12 +6,10 @@ import {
   Keyboard,
   Barcode as BarcodeIcon,
   CheckCircle2,
-  AlertCircle,
   X,
   Volume2,
   VolumeX,
   RefreshCw,
-  Plus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiRequest } from '../../lib/api';

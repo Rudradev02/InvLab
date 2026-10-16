@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "purchasing.apps.PurchasingConfig",
     "reports.apps.ReportsConfig",
     "audit.apps.AuditConfig",
+    "notifications.apps.NotificationsConfig",
     "api.apps.ApiConfig",
 ]
 
@@ -188,3 +189,17 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
 }
+
+# Email Configuration (Console email in dev, SMTP in prod, no secrets in repo)
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+    if DEBUG
+    else "django.core.mail.backends.smtp.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "InvLab Alerts <alerts@invlab.local>")

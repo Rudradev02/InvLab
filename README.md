@@ -95,6 +95,53 @@ docker compose exec web python manage.py seed_data
 - **Manager**: `rahul.manager` / `Manager@123` (Pune Central Warehouse)
 - **Staff**: `arun.staff` / `Staff@123` (Counter POS & Receiving)
 
+## Automated Notifications & Daily Summary
+
+InvLab features automated low-stock email alerts and a daily executive summary report without requiring external Celery/Redis daemons.
+
+### Email Configuration
+
+Email delivery settings are configured via environment variables in `.env`:
+
+```env
+# Optional SMTP configuration (defaults to Console backend in DEBUG mode)
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.sendgrid.net
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=apikey
+EMAIL_HOST_PASSWORD=your_sendgrid_or_smtp_key
+DEFAULT_FROM_EMAIL="InvLab Notifications <no-reply@invlab.local>"
+```
+
+### Scheduling the Daily Summary
+
+The daily executive summary aggregates low-stock inventory, daily sales transactions, net revenue, and customer credit balances across warehouses. It is executed via Django's management command:
+
+```bash
+python manage.py send_daily_summary
+```
+
+To test without sending actual emails, use `--dry-run`:
+
+```bash
+python manage.py send_daily_summary --dry-run
+```
+
+#### Linux / macOS (cron)
+Add an entry to crontab (`crontab -e`) to execute every evening at 19:00:
+
+```cron
+0 19 * * * cd /opt/invlab && /opt/invlab/.venv/bin/python manage.py send_daily_summary >> /var/log/invlab_summary.log 2>&1
+```
+
+#### Windows Task Scheduler
+- **Action**: Start a program
+- **Program**: `C:\path\to\invlab\.venv\Scripts\python.exe`
+- **Arguments**: `manage.py send_daily_summary`
+- **Start in**: `C:\path\to\invlab`
+- **Trigger**: Daily at 7:00 PM
+
 ## Licence
 
 To be decided before the first public release.

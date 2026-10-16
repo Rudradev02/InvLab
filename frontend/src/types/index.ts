@@ -577,3 +577,33 @@ export interface InvoiceDetails {
   financials: InvoiceFinancials;
 }
 
+export interface NotificationSettings {
+  id: number;
+  enable_low_stock_alerts: boolean;
+  enable_daily_summary: boolean;
+  additional_recipients: string;
+  additional_recipients_list: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LowStockAlertItem {
+  product_id: number;
+  product_name: string;
+  sku: string;
+  barcode: string | null;
+  warehouse_id: number;
+  warehouse_name: string;
+  warehouse_code: string;
+  quantity: number;
+  reorder_level: number;
+  is_out_of_stock: boolean;
+  last_alerted_at: string | null;
+}
+
+export interface LowStockAlertsResponse {
+  count: number;
+  results: LowStockAlertItem[];
+}
+
+

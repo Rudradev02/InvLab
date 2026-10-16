@@ -182,6 +182,9 @@ def create_sale(
 
             update_cached_product_stock(product.id)
 
+            from notifications.services import check_and_update_low_stock
+            check_and_update_low_stock(warehouse_id, product.id, stock_level.quantity, stock_level.reorder_level)
+
             unit_price = product.price
             line_subtotal = (unit_price * Decimal(qty)).quantize(Decimal("0.01"))
             subtotal_amount += line_subtotal
@@ -536,6 +539,9 @@ def process_sale_return(
             )
 
             update_cached_product_stock(product.id)
+
+            from notifications.services import check_and_update_low_stock
+            check_and_update_low_stock(sale.warehouse.id, product.id, stock_level.quantity, stock_level.reorder_level)
 
             SaleReturnLine.objects.create(
                 sale_return=sale_return,
